@@ -1,0 +1,160 @@
+{
+  "name": "GeoRoots Locator",
+  "short_name": "GeoRoots",
+  "description": "Offline-capable GPS data collection and mapping tool with tile caching for field surveys",
+  "version": "2.4.0",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1b4332",
+  "theme_color": "#40916c",
+  "scope": "./",
+  "lang": "en",
+  "dir": "ltr",
+  
+  "icons": [
+    {
+      "src": "icons/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  
+  "categories": ["navigation", "utilities", "productivity"],
+  "screenshots": [
+    {
+      "src": "screenshots/desktop-main.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide"
+    },
+    {
+      "src": "screenshots/mobile-map.png", 
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow"
+    }
+  ],
+  
+  "shortcuts": [
+    {
+      "name": "Create Point",
+      "description": "Quickly create a GPS point",
+      "url": "./index.html?action=create-point",
+      "icons": [
+        {
+          "src": "icons/shortcut-point.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Show Map",
+      "description": "Open map view",
+      "url": "./index.html?action=show-map",
+      "icons": [
+        {
+          "src": "icons/shortcut-map.png",
+          "sizes": "96x96", 
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Cache Manager",
+      "description": "Manage offline map cache",
+      "url": "./index.html?action=cache-manager",
+      "icons": [
+        {
+          "src": "icons/shortcut-cache.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  
+  "share_target": {
+    "action": "./index.html",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "files": [
+        { "name": "files", "accept": ["application/geo+json","application/json",".geojson",".json"] }
+      ]
+    }
+  },
+  
+  "capture_links": "existing-client-navigate",
+  
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  },
+
+  "protocol_handlers": [
+    {
+      "protocol": "geo",
+      "url": "./index.html?geo=%s"
+    }
+  ],
+
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
+
+  "file_handlers": [
+    {
+      "action": "./index.html",
+      "accept": {
+        "application/geo+json": [".geojson"],
+        "application/json": [".json"]
+      }
+    }
+  ]
+}
