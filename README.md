@@ -48,7 +48,6 @@ The Settings panel can enable predefined groups of additional fields:
 * **Basic** — visit outcome, identified issues, and approval.
 * **Advanced** — inspector, certifications, contact details, address information, and total farm area.
 * **Approval** — identified issues, approval status, approver, and approval date.
-* **SCFCU Form** — producer and farm details, production figures, coffee tree count, non-compliances, inspector, and total farm area.
 
 Fixed export properties can also be configured. These properties are added to every exported feature and overwrite an existing property with the same key.
 
@@ -100,26 +99,15 @@ Map tiles and environmental layers are supplied by third parties and remain subj
 
 Always inspect exported files before submitting or sharing them. CSV is useful for tabular review, while GeoJSON preserves the complete geometry and is the recommended backup format.
 
-### Languages
-
-The interface is available in:
-
-* English
-* Spanish
-* Portuguese
-* Swahili
-
-Language files are included in the offline application cache, so the interface language can be changed without an internet connection after the latest PWA version has been installed and activated.
-
 ### Local-first privacy
 
-Collected features, settings, and downloaded map areas are stored locally in the browser on the user's device. GeoRoots Locator does not upload collected features to a GeoRoots server.
+Collected features, settings, and downloaded map areas are stored locally in the browser on the user's device. GeoRoots Locator does not upload collected features to a GeoRoots or any other server.
 
-When the app is online, the browser still makes requests to third-party map and imagery providers to retrieve map tiles. Exported data leaves the device only when the user explicitly downloads or shares it.
+When the app is online, the browser still makes requests to third-party map and imagery providers to retrieve map tiles. Exported data leaves the device only when the user explicitly exports it or shares it.
 
 ## Usage
 
-1. Open GeoRoots Locator in a supported browser.
+1. Open GeoRoots Locator in a browser.
 2. On the mobile device that will be used in the field, install the app when prompted for easier access and a standalone interface.
 3. Allow location access when the browser requests it.
 4. Open **Settings** to choose a language and an additional-field profile.
@@ -146,7 +134,7 @@ When the app is online, the browser still makes requests to third-party map and 
 
 ##### Q: **Does Locator work completely offline?**
 
-A: The application interface and translations work offline after the service worker has installed and activated. Map areas must be downloaded in advance. GPS itself does not require mobile data, although some devices may obtain a faster initial position when connected.
+A: The application interface work offline after the app has been installed and activated. Map areas must be downloaded in advance. GPS itself does not require mobile data, although some devices may obtain a faster initial position when connected.
 
 ##### Q: **Is an iOS PWA limited to 50 MB of storage?**
 
@@ -174,7 +162,7 @@ A: Yes. Open the feature in **Manage Features** and use **Re-draw** to replace i
 
 ##### Q: **Can I use my own map data?**
 
-A: GeoJSON files can be loaded as custom overlays. They are intended as visual references and can be made interactive or non-interactive. Imported overlays are kept separate from the collected feature dataset.
+A: GeoJSON files can be loaded as custom overlays. They are intended as visual references and can be made interactive or non-interactive. Imported overlays are kept separate from the collected feature dataset. If you need to use different map sources, you can copy the source code, change the map tiles used in the code and deploy it on your own infrastructure.
 
 ##### Q: **Which import formats are supported?**
 
@@ -196,21 +184,9 @@ A: Yes. Open an issue with the requested language. Contributions that improve ex
 
 A: Locator is in Beta. Organisations should test their complete collection, review, backup, and export workflow before deployment. Use appropriate independent quality checks and do not treat the app as a substitute for professional surveying, legal advice, or certification guidance.
 
-## Running Locally
-
-Locator has no build step or package dependencies. Because service workers and browser geolocation require a secure context, serve the repository through `localhost` during development instead of opening `index.html` directly:
-
-```sh
-python -m http.server 8080
-```
-
-Then open `http://localhost:8080/` in a supported browser.
-
-For production, deploy all repository assets together over HTTPS, including `index.html`, `sw.js`, `manifest.json`, icons, and translation files.
-
 ## Mobile-First Device and Browser Support
 
-Locator is primarily designed for current mobile phones and tablets with support for JavaScript, Geolocation, IndexedDB, local storage, and service workers. The intended workflow is to install the PWA on the field device, prepare offline maps before travel, collect data using the device GPS, and export backups from that device.
+Locator is primarily designed for current mobile phones and tablets. The intended workflow is to install the PWA on the field device, prepare offline maps before travel, collect data using the device GPS, and export backups from that device.
 
 Desktop browsers are supported for reviewing, editing, importing, and exporting data, but the interface and operational workflow are optimised for mobile field collection rather than desktop GIS use.
 
