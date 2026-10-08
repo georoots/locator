@@ -5626,28 +5626,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         }
 
         // Calculate polygon area in hectares using Web Mercator projection + shoelace
+        // Spherical polygon area (same formula as Turf/Leaflet). Shoelace on Web Mercator
+        // coordinates would overstate the area by 1/cos²(latitude).
         function polygonAreaHectares(coordinatesLngLat) {
             const ring = normalizePolygonRing(coordinatesLngLat);
             if (!ring) return 0;
             const R = 6378137; // meters
             const toRad = (d) => d * Math.PI / 180;
-            const openRing = ring.slice(0, -1);
-            const n = openRing.length;
-            if (n < 3) return 0;
-            // Project to Web Mercator
-            const projected = openRing.map(([lng, lat]) => {
-                const x = R * toRad(lng);
-                const y = R * Math.log(Math.tan(Math.PI / 4 + toRad(lat) / 2));
-                return [x, y];
-            });
             let sum = 0;
-            for (let i = 0; i < n; i++) {
-                const [x1, y1] = projected[i];
-                const [x2, y2] = projected[(i + 1) % n];
-                sum += (x1 * y2) - (x2 * y1);
+            for (let i = 0; i < ring.length - 1; i++) {
+                const [lng1, lat1] = ring[i];
+                const [lng2, lat2] = ring[i + 1];
+                sum += toRad(lng2 - lng1) * (2 + Math.sin(toRad(lat1)) + Math.sin(toRad(lat2)));
             }
-            const areaM2 = Math.abs(sum) / 2;
-            return areaM2 / 10000; // hectares
+            return Math.abs(sum * R * R / 2) / 10000; // hectares
         }
 
         function finishPolygon(optionalRing) {
