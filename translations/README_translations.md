@@ -29,7 +29,7 @@ From the repo root:
 node translations/extract-i18n.js
 ```
 
-This writes `i18n-{code}.json` for every language found in the app and verifies that all languages have the same keys as English (currently 342). The script exits with an error if any language is missing or has extra keys.
+This writes `i18n-{code}.json` for every language found in the app and verifies that all languages have the same keys as English (currently 350). The script exits with an error if any language is missing or has extra keys.
 
 ## Translation editor (for volunteers)
 

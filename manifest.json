@@ -2,7 +2,7 @@
   "name": "GeoRoots Locator",
   "short_name": "GeoRoots",
   "description": "Offline-capable GPS data collection and mapping tool with tile caching for field surveys",
-  "version": "2.6.4",
+  "version": "2.6.5",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "any",

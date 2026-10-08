@@ -1041,6 +1041,27 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             right: 10px;
         }
 
+        /* Storage warning badge - below the online indicator */
+        .storage-badge {
+            position: fixed;
+            top: 44px;
+            right: 10px;
+            z-index: 1200;
+            border: none;
+            border-radius: 20px;
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--white);
+            background: var(--danger-color);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+            cursor: pointer;
+        }
+        .storage-badge[data-state="backup"] {
+            background: var(--warning-color);
+            color: #212529;
+        }
+
         /* Floating download progress indicator */
         .download-progress-float {
             position: fixed;
@@ -1366,6 +1387,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 top: calc(10px + env(safe-area-inset-top, 0px));
                 right: calc(10px + env(safe-area-inset-right, 0px));
             }
+
+            .storage-badge {
+                top: calc(44px + env(safe-area-inset-top, 0px));
+                right: calc(10px + env(safe-area-inset-right, 0px));
+            }
             
             .download-progress-float {
                 /* Ensure progress indicator respects safe areas */
@@ -1461,6 +1487,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
     <!-- Offline indicator -->
     <div id="offlineIndicator" class="offline-indicator online" data-i18n="status.online">Online</div>
+    <button id="storageBadge" class="storage-badge hidden" type="button"></button>
 
     <!-- Removed legacy mainView content completely -->
 
@@ -1581,6 +1608,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 <div class="cache-stats">
                     <div style="font-weight:700; margin-bottom:4px;" data-i18n="cache.storageUsage">Storage Usage</div>
                     <div id="storageStats" data-i18n="cache.calculating">Calculating...</div>
+                    <div id="storageProtection" class="feature-meta" style="margin-top:4px;"></div>
                 </div>
 
                 <!-- Active Downloads -->
@@ -1645,7 +1673,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 <div style="font-size:14px; color:var(--gray-dark);margin-top: 8px;" data-i18n="about.privacy">All data is stored locally on your device, no information is transmitted to ANY servers.</div>
                 <div style="font-size:14px; color:var(--gray-dark);margin-top: 8px;" data-i18n-html="about.openSource">This app is free and open source, and all code is available on <a href="https://github.com/georoots" target="_blank">GitHub</a>. You are welcome to submit your contributions to the project. Any issues or suggestions, please report them on <a href="https://github.com/georooots/locator/issues" target="_blank">GitHub Issues</a> or via email to <a href="mailto:info@georoots.eu">info@georoots.eu</a>.</div>
                 <div style="font-size:14px; color:var(--gray-dark);margin-top: 8px;" data-i18n-html="about.moreTools">For more free tools, visit <a href="https://georoots.eu/" target="_blank">georoots.eu</a>.</div>
-                <div style="margin-top:8px; font-size:12px; color:var(--gray-medium);"><span data-i18n="about.versionLabel">Version:</span> 2.6.4</div>
+                <div style="margin-top:8px; font-size:12px; color:var(--gray-medium);"><span data-i18n="about.versionLabel">Version:</span> 2.6.5</div>
                 <div style="margin-top:16px;">
                     <button class="btn btn-primary btn-block" id="btnInstallAppManual" style="display:none;" data-i18n="install.title">Install App</button>
                 </div>
@@ -2244,6 +2272,168 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         let persistConsent = localStorage.getItem(PERSIST_KEY);
         if (persistConsent !== 'true' && persistConsent !== 'false') persistConsent = null;
 
+        // Rejects if the promise hasn't settled in time, so a hung IndexedDB can't block startup
+        function withTimeout(promise, ms) {
+            return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('Timed out')), ms))]);
+        }
+
+        // Field data (features, overlays) lives in IndexedDB: a far larger quota than localStorage's ~5 MB,
+        // and 'strict' durability flushes each write to disk so a power loss can't drop a saved feature.
+        const dataStore = (() => {
+            const USED_FLAG = 'geolocator.dataStore'; // set once IndexedDB has held data on this device
+            const unreadable = new Set(); // keys that failed to load and therefore must not be overwritten
+            let dbPromise = null;
+
+            function openDb() {
+                if (!dbPromise) {
+                    dbPromise = withTimeout(new Promise((resolve, reject) => {
+                        const req = indexedDB.open('GeoRootsData', 1);
+                        req.onupgradeneeded = () => req.result.createObjectStore('kv');
+                        req.onsuccess = () => {
+                            const db = req.result;
+                            db.onversionchange = () => { db.close(); dbPromise = null; };
+                            db.onclose = () => { dbPromise = null; };
+                            resolve(db);
+                        };
+                        req.onerror = () => reject(req.error);
+                    }), 5000);
+                    dbPromise.catch(() => { dbPromise = null; });
+                }
+                return dbPromise;
+            }
+
+            async function run(mode, operation) {
+                const db = await openDb();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction('kv', mode, { durability: 'strict' });
+                    const req = operation(tx.objectStore('kv'));
+                    tx.oncomplete = () => resolve(req.result);
+                    tx.onabort = () => reject(tx.error || new Error('Transaction aborted'));
+                });
+            }
+
+            async function put(key, value) {
+                await run('readwrite', store => store.put(value, key));
+                try { localStorage.setItem(USED_FLAG, 'indexeddb'); } catch (_) {}
+            }
+
+            function readLocal(key) {
+                try {
+                    const raw = localStorage.getItem(key);
+                    return raw === null ? undefined : JSON.parse(raw);
+                } catch (_) {
+                    return undefined;
+                }
+            }
+
+            // A localStorage copy only exists from older app versions or from devices without IndexedDB,
+            // so when present it is always the newest data and is moved into IndexedDB.
+            async function load(key) {
+                const local = readLocal(key);
+                try {
+                    if (local === undefined) return await run('readonly', store => store.get(key));
+                    await put(key, local);
+                    localStorage.removeItem(key);
+                    return local;
+                } catch (e) {
+                    console.error(`Could not load ${key} from IndexedDB`, e);
+                    if (local === undefined) { unreadable.add(key); throw e; }
+                    return local;
+                }
+            }
+
+            async function save(key, value) {
+                if (unreadable.has(key)) throw new Error(`${key} could not be loaded; refusing to overwrite it`);
+                try {
+                    await put(key, value);
+                } catch (e) {
+                    // localStorage is only a safe fallback if IndexedDB never held data; otherwise this
+                    // copy would later replace newer data in IndexedDB
+                    if (localStorage.getItem(USED_FLAG)) throw e;
+                    localStorage.setItem(key, JSON.stringify(value)); // throws QuotaExceededError when full
+                }
+            }
+
+            return { load, save };
+        })();
+
+        let storageReady = false;      // stored data has been loaded; saving earlier would overwrite it
+        let storageSaveFailed = false; // last save of features or overlays failed
+
+        function reportSaveResult(promise) {
+            return promise.then(
+                () => { storageSaveFailed = false; updateStorageBadge(); },
+                (e) => {
+                    console.error('Saving to device storage failed', e);
+                    storageSaveFailed = true;
+                    updateStorageBadge();
+                    showLongToast(t('storage.saveFailed', 'Could not save to this device. Export a backup now.'));
+                }
+            );
+        }
+
+        async function requestPersistentStorage() {
+            try {
+                if (navigator.storage && navigator.storage.persist && !(await navigator.storage.persisted())) {
+                    await navigator.storage.persist();
+                }
+            } catch (_) {}
+        }
+
+        // Backup tracking: changes since the last GeoJSON export
+        const BACKUP_KEY = 'geolocator.backupState';
+        const BACKUP_REMIND_CHANGES = 10;
+        const BACKUP_REMIND_MS = 24 * 60 * 60 * 1000;
+        let backupState = (() => {
+            try {
+                const s = JSON.parse(localStorage.getItem(BACKUP_KEY));
+                if (s && Number.isFinite(s.pendingCount)) return s;
+            } catch (_) {}
+            return { pendingCount: 0, pendingSince: null };
+        })();
+        function saveBackupState() {
+            try { localStorage.setItem(BACKUP_KEY, JSON.stringify(backupState)); } catch (_) {}
+            updateStorageBadge();
+        }
+        function noteFeatureChange() {
+            backupState = { pendingCount: backupState.pendingCount + 1, pendingSince: backupState.pendingSince || Date.now() };
+            saveBackupState();
+        }
+        function noteBackupDone() {
+            backupState = { pendingCount: 0, pendingSince: null };
+            saveBackupState();
+        }
+        function isBackupDue() {
+            return features.length > 0 && backupState.pendingCount > 0 &&
+                (backupState.pendingCount >= BACKUP_REMIND_CHANGES || Date.now() - backupState.pendingSince >= BACKUP_REMIND_MS);
+        }
+
+        // One badge for the most urgent storage problem: failed save > saving declined > backup overdue
+        function updateStorageBadge() {
+            const badge = document.getElementById('storageBadge');
+            if (!badge) return;
+            let state = '';
+            if (storageSaveFailed) state = 'failed';
+            else if (persistConsent === 'false' && features.length > 0) state = 'notSaved';
+            else if (isBackupDue()) state = 'backup';
+            badge.dataset.state = state;
+            badge.classList.toggle('hidden', !state);
+            badge.textContent = {
+                failed: t('storage.badgeSaveFailed', 'Not saved!'),
+                notSaved: t('storage.badgeNotSaved', 'Not saved on device'),
+                backup: t('storage.badgeBackup', `${backupState.pendingCount} change(s) not backed up`, { count: backupState.pendingCount })
+            }[state] || '';
+        }
+
+        function onStorageBadgeClick() {
+            if (document.getElementById('storageBadge').dataset.state !== 'notSaved') { exportGeoJSON(); return; }
+            if (!confirm(t('toast.persistenceConfirm', 'Allow saving created features to this device?'))) return;
+            persistConsent = 'true';
+            try { localStorage.setItem(PERSIST_KEY, persistConsent); } catch (_) {}
+            requestPersistentStorage();
+            persistFeatures();
+        }
+
         // Settings storage
         function loadSettings() {
             try {
@@ -2519,6 +2709,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 'import.parseFailed': 'Failed to parse GeoJSON',
                 'import.skippedFiles': 'Skipped {count} file(s) without valid GeoJSON: {names}',
                 'import.nothingReceived': 'No file was received',
+                'storage.saveFailed': 'Could not save to this device. Export a backup now.',
+                'storage.badgeSaveFailed': 'Not saved!',
+                'storage.badgeNotSaved': 'Not saved on device',
+                'storage.badgeBackup': '{count} change(s) not backed up',
+                'storage.protected': 'Protected from automatic deletion by the browser',
+                'storage.notProtected': 'Not protected: the browser may delete offline data when the device runs low on space',
+                'cache.missingTilesToast': 'Some downloaded maps are missing tiles. Check Download Maps.',
+                'cache.areaTilesMissing': 'Tiles missing – download this area again',
                 'export.noFeatures': 'No features to export',
                 'export.geojsonComplete': 'GeoJSON exported',
                 'export.csvComplete': 'CSV exported',
@@ -2677,6 +2875,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             renderLanguageOptions();
             renderLayerOptions();
             renderFeatureList();
+            updateStorageBadge();
             if (!document.getElementById('manageFeaturesModal').classList.contains('hidden')) renderManageFeatures();
             if (!document.getElementById('cacheModal').classList.contains('hidden')) {
                 renderCachedAreas();
@@ -2714,7 +2913,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
         // Initialize IndexedDB for tile caching
         async function initTileCache() {
-            return new Promise((resolve, reject) => {
+            return withTimeout(new Promise((resolve, reject) => {
                 const request = indexedDB.open('TileCache', 1);
                 
                 request.onerror = () => reject(request.error);
@@ -2737,7 +2936,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                         metaStore.put([], 'cachedAreas');
                     }
                 };
-            });
+            }), 5000);
         }
 
         // Get tile from cache
@@ -2785,20 +2984,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             return getTileCoordinatesStandalone(bounds, zoom);
         }
 
+        // Convert lat/lng to tile coordinates using standard Web Mercator formulas
+        function latLngToTile(lat, lng, zoom) {
+            const n = Math.pow(2, zoom);
+            const x = Math.floor((lng + 180) / 360 * n);
+            const y = Math.floor((1 - Math.asinh(Math.tan(lat * Math.PI / 180)) / Math.PI) / 2 * n);
+            return { x, y };
+        }
+
         // Standalone tile coordinate calculation (doesn't require map object)
         function getTileCoordinatesStandalone(bounds, zoom) {
             const north = bounds.getNorth ? bounds.getNorth() : bounds.north;
             const south = bounds.getSouth ? bounds.getSouth() : bounds.south;
             const west = bounds.getWest ? bounds.getWest() : bounds.west;
             const east = bounds.getEast ? bounds.getEast() : bounds.east;
-            
-            // Convert lat/lng to tile coordinates using standard Web Mercator formulas
-            function latLngToTile(lat, lng, zoom) {
-                const n = Math.pow(2, zoom);
-                const x = Math.floor((lng + 180) / 360 * n);
-                const y = Math.floor((1 - Math.asinh(Math.tan(lat * Math.PI / 180)) / Math.PI) / 2 * n);
-                return { x, y };
-            }
             
             const nwTile = latLngToTile(north, west, zoom);
             const seTile = latLngToTile(south, east, zoom);
@@ -2953,6 +3152,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             
             isDownloading = true;
             downloadQueue = [];
+            requestPersistentStorage();
             
             // Build download queue
             for (let layerName of layers) {
@@ -3244,29 +3444,83 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                     percent: percentUsed,
                     count: cachedAreas.length
                 });
+                const persisted = navigator.storage.persisted ? await navigator.storage.persisted() : false;
+                const protection = document.getElementById('storageProtection');
+                protection.textContent = persisted
+                    ? t('storage.protected', 'Protected from automatic deletion by the browser')
+                    : t('storage.notProtected', 'Not protected: the browser may delete offline data when the device runs low on space');
+                protection.style.color = persisted ? '' : 'var(--danger-color)';
             } catch (error) {
                 document.getElementById('storageStats').textContent = t('cache.storageUnavailable', 'Unable to check storage');
             }
         }
 
-        // Save cached areas to localStorage
-        function saveCachedAreas() {
-            try {
-                localStorage.setItem(CACHE_AREAS_KEY, JSON.stringify(cachedAreas));
-            } catch (e) {}
+        // The list of downloaded areas is kept next to its tiles, so both survive or disappear together
+        function cachedAreasRequest(mode, operation) {
+            return new Promise((resolve, reject) => {
+                const tx = cacheDb.transaction('metadata', mode);
+                const req = operation(tx.objectStore('metadata'));
+                tx.oncomplete = () => resolve(req.result);
+                tx.onabort = () => reject(tx.error || new Error('Transaction aborted'));
+            });
         }
 
-        // Load cached areas from localStorage
-        function loadCachedAreas() {
+        function saveCachedAreas() {
+            const list = cachedAreas.map(({ tilesMissing, ...area }) => area);
+            if (!cacheDb) {
+                try { localStorage.setItem(CACHE_AREAS_KEY, JSON.stringify(list)); } catch (e) {}
+                return Promise.resolve();
+            }
+            return cachedAreasRequest('readwrite', store => store.put(list, 'cachedAreas'))
+                .catch(e => console.error('Failed to save downloaded map list', e));
+        }
+
+        // Areas listed by older versions in localStorage are merged in once, then removed from there
+        async function loadCachedAreas() {
+            let legacy = [];
+            try { legacy = JSON.parse(localStorage.getItem(CACHE_AREAS_KEY)) || []; } catch (_) {}
+            if (!Array.isArray(legacy)) legacy = [];
+            if (!cacheDb) { cachedAreas = legacy; return; }
             try {
-                const data = localStorage.getItem(CACHE_AREAS_KEY);
-                if (data) {
-                    const areas = JSON.parse(data);
-                    if (Array.isArray(areas)) {
-                        cachedAreas = areas;
-                    }
+                const stored = await cachedAreasRequest('readonly', store => store.get('cachedAreas'));
+                cachedAreas = Array.isArray(stored) ? stored : [];
+                if (legacy.length) {
+                    const known = new Set(cachedAreas.map(a => a.id));
+                    cachedAreas.push(...legacy.filter(a => !known.has(a.id)));
+                    await cachedAreasRequest('readwrite', store => store.put(cachedAreas, 'cachedAreas'));
                 }
-            } catch (e) {}
+                localStorage.removeItem(CACHE_AREAS_KEY);
+            } catch (e) {
+                console.error('Failed to load downloaded map list', e);
+                cachedAreas = legacy;
+            }
+        }
+
+        // Spot-check each downloaded area so missing tiles are noticed before going offline.
+        // Samples the corners and centre at the lowest zoom, which a completed download always contains.
+        async function verifyCachedAreas() {
+            if (!cacheDb || cachedAreas.length === 0) return;
+            const store = cacheDb.transaction('tiles').objectStore('tiles');
+            const tileExists = key => new Promise(resolve => {
+                const req = store.count(key);
+                req.onsuccess = () => resolve(req.result > 0);
+                req.onerror = () => resolve(true);
+            });
+            const checks = cachedAreas.map(area => {
+                const { north, south, east, west } = area.bounds || {};
+                const points = [[north, west], [north, east], [south, west], [south, east], [(north + south) / 2, (east + west) / 2]];
+                const keys = (area.layers || []).flatMap(layer => points.map(([lat, lng]) => {
+                    const { x, y } = latLngToTile(lat, lng, area.minZoom);
+                    return `${layer}:${area.minZoom}:${x}:${y}`;
+                }));
+                return Promise.all(keys.map(tileExists)).then(found => {
+                    area.tilesMissing = found.length > 0 && !found.some(Boolean);
+                });
+            });
+            await Promise.all(checks);
+            if (cachedAreas.some(a => a.tilesMissing)) {
+                showLongToast(t('cache.missingTilesToast', 'Some downloaded maps are missing tiles. Check Download Maps.'));
+            }
         }
 
         // Render cached areas list
@@ -3297,6 +3551,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                     count: area.tileCount,
                     layers: localizedLayers
                 });
+                if (area.tilesMissing) {
+                    const warning = document.createElement('div');
+                    warning.className = 'feature-meta';
+                    warning.style.color = 'var(--danger-color)';
+                    warning.textContent = t('cache.areaTilesMissing', 'Tiles missing – download this area again');
+                    meta.appendChild(warning);
+                }
                 left.appendChild(title);
                 left.appendChild(meta);
                 
@@ -3378,6 +3639,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 const store = transaction.objectStore('tiles');
                 store.clear();
             }
+            try { await caches.delete('georoots-tiles'); } catch (_) {}
             
             cachedAreas = [];
             saveCachedAreas();
@@ -3420,10 +3682,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             }
         }
 
+        // Call after every change to the features
         function saveFeaturesIfAllowed() {
-            if (persistConsent === 'true') {
-                try { localStorage.setItem(FEATURES_KEY, JSON.stringify(features)); } catch(e) {}
-            }
+            noteFeatureChange();
+            persistFeatures();
+        }
+
+        function persistFeatures() {
+            updateStorageBadge();
+            if (persistConsent !== 'true' || !storageReady) return;
+            reportSaveResult(dataStore.save(FEATURES_KEY, features));
         }
 
         function ensurePersistConsentThenSave() {
@@ -3431,6 +3699,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 const allow = confirm(t('toast.persistenceConfirm', 'Allow saving created features to this device?'));
                 persistConsent = allow ? 'true' : 'false';
                 try { localStorage.setItem(PERSIST_KEY, persistConsent); } catch(e) {}
+                if (allow) requestPersistentStorage();
             }
             saveFeaturesIfAllowed();
         }
@@ -3530,16 +3799,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             }
         }
 
-        function loadFeaturesFromStorage() {
-            try {
-                const data = localStorage.getItem(FEATURES_KEY);
-                if (data) {
-                    const arr = JSON.parse(data);
-                    if (Array.isArray(arr)) {
-                        features = arr;
-                    }
-                }
-            } catch(e) {}
+        // Load saved features and overlays (map must exist). Anything added before loading finished is kept.
+        async function loadStoredData() {
+            const load = key => dataStore.load(key).catch(() => { storageSaveFailed = true; return undefined; });
+            const [storedFeatures, storedOverlays] = await Promise.all([load(FEATURES_KEY), load(CUSTOM_OVERLAYS_KEY)]);
+            const featuresAddedEarly = features;
+            const overlaysAddedEarly = customOverlays.length;
+            features = (Array.isArray(storedFeatures) ? storedFeatures : []).concat(featuresAddedEarly);
+            loadCustomOverlays(storedOverlays);
+            storageReady = true;
+            if (featuresAddedEarly.length) persistFeatures();
+            if (overlaysAddedEarly) saveCustomOverlays();
+            updateStorageBadge();
         }
 
         // Update online/offline indicator
@@ -4347,17 +4618,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
         const CUSTOM_OVERLAYS_KEY = 'geolocator.customOverlays';
         function saveCustomOverlays() {
-            try {
-                // Persist only serializable data
-                const simplified = customOverlays.map(o => ({ name: o.name, color: o.color, data: o.data, isInteractive: o.isInteractive !== false }));
-                localStorage.setItem(CUSTOM_OVERLAYS_KEY, JSON.stringify(simplified));
-            } catch (e) {}
+            if (!storageReady) return;
+            // Persist only serializable data
+            const simplified = customOverlays.map(o => ({ name: o.name, color: o.color, data: o.data, isInteractive: o.isInteractive !== false }));
+            reportSaveResult(dataStore.save(CUSTOM_OVERLAYS_KEY, simplified));
         }
-        function loadCustomOverlays() {
+        function loadCustomOverlays(items) {
             try {
-                const data = localStorage.getItem(CUSTOM_OVERLAYS_KEY);
-                if (!data) return;
-                const items = JSON.parse(data);
                 if (!Array.isArray(items)) return;
                 items.forEach(item => {
                     try {
@@ -5921,6 +6188,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             const a = document.createElement('a'); a.href = url; a.download = name;
             document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
             document.getElementById('exportModal').classList.add('hidden');
+            noteBackupDone();
             showToast(t('export.geojsonComplete', 'GeoJSON exported'));
         }
 
@@ -5940,6 +6208,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                     text: t('export.shareText', 'GeoJSON export')
                 });
                 document.getElementById('exportModal').classList.add('hidden');
+                noteBackupDone();
                 showToast(t('export.shared', 'Shared'));
             } catch (e) {
                 // On unsupported or failure, fallback to download
@@ -6456,15 +6725,27 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             disableAutofill();
             renderLanguageOptions();
             applyTranslations();
-            loadFeaturesFromStorage();
-            loadCachedAreas();
-            // Ensure map initialized BEFORE loading overlays so we can attach layers immediately
+            document.getElementById('storageBadge').onclick = onStorageBadgeClick;
+
+            // Open the tile cache before the map exists, so the first tiles drawn offline come from it
+            try {
+                await initTileCache();
+            } catch (error) {
+                console.error('Failed to initialize tile cache:', error);
+                showToast(t('cache.notAvailable', 'Cache not available'));
+            }
+            await loadCachedAreas();
+
+            // Map must exist before stored overlays are attached to it
             initializeMapIfNeeded();
+            await loadStoredData();
             drawFeaturesOnMap();
-            loadCustomOverlays();
             renderFeatureList();
             startTracking();
             updateOnlineStatus();
+            verifyCachedAreas();
+            if (persistConsent === 'true' || cachedAreas.length) requestPersistentStorage();
+            document.addEventListener('visibilitychange', () => { if (!document.hidden) updateStorageBadge(); });
             offerRecordingDraftResume();
             
             // Handle URL parameters for shortcuts and deep linking (before the SW update check,
@@ -6485,15 +6766,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             
             // Register service worker
             await registerServiceWorker();
-            
-            // Initialize tile cache
-            try {
-                await initTileCache();
-                console.log('Tile cache initialized');
-            } catch (error) {
-                console.error('Failed to initialize tile cache:', error);
-                showToast(t('cache.notAvailable', 'Cache not available'));
-            }
             
             // Check if running as PWA and log
             if (isPWA()) {
