@@ -126,7 +126,7 @@
       "title": "title",
       "text": "text",
       "files": [
-        { "name": "files", "accept": ["application/geo+json","application/json",".geojson",".json"] }
+        { "name": "files", "accept": ["application/geo+json","application/vnd.geo+json","application/json","text/json","text/plain","application/octet-stream",".geojson",".json"] }
       ]
     }
   },
@@ -153,7 +153,8 @@
       "action": "./index.html",
       "accept": {
         "application/geo+json": [".geojson"],
-        "application/json": [".json"]
+        "application/json": [".json"],
+        "application/octet-stream": [".geojson", ".json"]
       }
     }
   ]

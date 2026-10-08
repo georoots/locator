@@ -1844,7 +1844,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 <button class="btn btn-light btn-small" id="btnCloseImportChoice" data-i18n="common.close">Close</button>
             </div>
             <div class="modal-body">
-                <div style="margin-bottom:8px;" data-i18n="import.chooseMethod">How would you like to import the file?</div>
+                <div style="margin-bottom:8px;" id="importChoiceMessage">How would you like to import the file?</div>
                 <div style="display:flex; gap:8px;">
                     <button class="btn btn-primary btn-block" id="btnImportAsFeatures" data-i18n="import.asFeatures">Import as Features</button>
                     <button class="btn btn-secondary btn-block" id="btnImportAsOverlay" data-i18n="import.asOverlay">Import as Overlay</button>
@@ -1905,7 +1905,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     </div>
 
     <!-- Overlay loader -->
-    <input type="file" id="fileInput" accept=".geojson,.json,application/geo+json,application/vnd.geo+json,application/*+json,application/json,text/plain,application/octet-stream" class="hidden">
+    <input type="file" id="fileInput" multiple accept=".geojson,.json,application/geo+json,application/vnd.geo+json,application/*+json,application/json,text/plain,application/octet-stream" class="hidden">
 
     <!-- PWA Install Prompt -->
     <div id="installPrompt" class="install-prompt hidden">
@@ -2018,6 +2018,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     <script src="./translations-es.js"></script>
     <script src="./translations-pt.js"></script>
     <script src="./translations-sw.js"></script>
+    <script src="./translations-cs.js"></script>
     <script>
         /*
          * JAVASCRIPT VIEWPORT HEIGHT MANAGEMENT
@@ -2459,6 +2460,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 'export.csvTitle': 'Export CSV',
                 'import.geojsonTitle': 'Import GeoJSON',
                 'import.chooseMethod': 'How would you like to import the file?',
+                'import.chooseMethodMultiple': 'How would you like to import {count} files?',
                 'import.asFeatures': 'Import as Features',
                 'import.asOverlay': 'Import as Overlay',
                 'about.title': 'About',
@@ -2519,6 +2521,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 'import.importedFeatures': 'Imported {count} feature(s)',
                 'import.noValidFeatures': 'No valid features to import',
                 'import.parseFailed': 'Failed to parse GeoJSON',
+                'import.skippedFiles': 'Skipped {count} file(s) without valid GeoJSON: {names}',
+                'import.nothingReceived': 'No file was received',
                 'export.noFeatures': 'No features to export',
                 'export.geojsonComplete': 'GeoJSON exported',
                 'export.csvComplete': 'CSV exported',
@@ -2526,6 +2530,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 'export.shareTitle': 'GeoRoots Export',
                 'export.shareText': 'GeoJSON export',
                 'overlay.loaded': 'Overlay loaded: {name}',
+                'overlay.loadedMultiple': '{count} overlays loaded',
                 'map.notInitialized': 'Map not initialized',
                 'map.currentLocation': 'Your current location',
                 'capture.walkCorners': 'Walk to each corner and tap Add Vertex',
@@ -3422,32 +3427,71 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             saveFeaturesIfAllowed();
         }
 
-        // Import GeoJSON into working features
-        function importGeoJSONAsFeatures(file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const data = JSON.parse(e.target.result);
-                    const fc = normalizeToFeatureCollection(data);
-                    if (!fc || !Array.isArray(fc.features)) { showToast(t('import.invalidGeojson', 'Invalid GeoJSON')); return; }
-                    let imported = 0;
-                    fc.features.forEach(f => {
-                        const norm = normalizeFeatureGeometry(f);
-                        if (norm) { features.push(norm); imported++; }
-                    });
-                    if (imported > 0) {
-                        ensurePersistConsentThenSave();
-                        renderFeatureList();
-                        if (map) drawFeaturesOnMap();
-                        showToast(t('import.importedFeatures', `Imported ${imported} feature(s)`, { count: imported }));
-                    } else {
-                        showToast(t('import.noValidFeatures', 'No valid features to import'));
-                    }
-                } catch (err) {
-                    showToast(t('import.parseFailed', 'Failed to parse GeoJSON'));
+        // Detect GeoJSON by content, not by MIME type or extension: Android share sources
+        // (e.g. WhatsApp) often deliver .geojson files as application/octet-stream or text/plain.
+        async function readGeoJSONFile(file) {
+            try {
+                // Cheap sniff first so large non-JSON files (photos, videos) are never fully decoded
+                const head = (await file.slice(0, 256).text()).replace(/^\uFEFF/, '').trimStart();
+                if (!head.startsWith('{')) return null;
+                const gj = JSON.parse((await file.text()).replace(/^\uFEFF/, ''));
+                return gj && typeof gj.type === 'string' ? gj : null;
+            } catch (_) {
+                return null;
+            }
+        }
+
+        function importDisplayName(file, index) {
+            return (file.name || '').replace(/\.bin$/i, '').trim() || `shared_${index + 1}.geojson`;
+        }
+
+        function addFeaturesFromGeoJSON(gj) {
+            const fc = normalizeToFeatureCollection(gj);
+            if (!fc || !Array.isArray(fc.features)) return 0;
+            const valid = fc.features.map(normalizeFeatureGeometry).filter(Boolean);
+            valid.forEach(f => features.push(f));
+            return valid.length;
+        }
+
+        // Import files as working features or as custom overlays ('features' | 'overlay')
+        async function importGeoJSONFiles(files, mode) {
+            if (!files.length) return;
+            initializeMapIfNeeded();
+            let featureCount = 0;
+            const overlayNames = [];
+            const skipped = [];
+            for (const [index, file] of files.entries()) {
+                const name = importDisplayName(file, index);
+                const gj = await readGeoJSONFile(file);
+                if (!gj) {
+                    skipped.push(name);
+                } else if (mode === 'features') {
+                    const count = addFeaturesFromGeoJSON(gj);
+                    if (count) featureCount += count; else skipped.push(name);
+                } else if (addCustomOverlay(gj, name)) {
+                    overlayNames.push(name);
+                } else {
+                    skipped.push(name);
                 }
-            };
-            reader.readAsText(file);
+            }
+
+            if (featureCount) {
+                ensurePersistConsentThenSave();
+                renderFeatureList();
+            }
+            if (overlayNames.length) {
+                saveCustomOverlays();
+                ensureOverlaysOnTop();
+                renderCustomOverlayOptions();
+                if (!document.getElementById('layersModal').classList.contains('hidden')) renderLayerOptions();
+            }
+
+            const messages = [];
+            if (featureCount) messages.push(t('import.importedFeatures', `Imported ${featureCount} feature(s)`, { count: featureCount }));
+            if (overlayNames.length === 1) messages.push(t('overlay.loaded', `Overlay loaded: ${overlayNames[0]}`, { name: overlayNames[0] }));
+            if (overlayNames.length > 1) messages.push(t('overlay.loadedMultiple', `${overlayNames.length} overlays loaded`, { count: overlayNames.length }));
+            if (skipped.length) messages.push(t('import.skippedFiles', `Skipped ${skipped.length} file(s) without valid GeoJSON: ${skipped.join(', ')}`, { count: skipped.length, names: skipped.join(', ') }));
+            showToast(messages.join(' • '));
         }
 
         function normalizeToFeatureCollection(gj) {
@@ -4111,6 +4155,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             // Hide all modals/sheets that may be visible
             ['layersModal','overlaysModal','cacheModal','manageFeaturesModal','aboutModal','cacheSelectionModal','featureForm','exportModal','importChoiceModal','captureMethodModal','recordingWarningModal']
                 .forEach((id) => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
+            if (resolveImportChoice) resolveImportChoice(null);
 
             // Cancel cache-area selection overlay and clear any selected bounds
             if (typeof cancelCacheAreaSelection === 'function') { try { cancelCacheAreaSelection(); } catch (_) {} }
@@ -4248,6 +4293,27 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             });
         }
 
+        function createOverlayLayer(gj, color) {
+            return L.geoJSON(gj, {
+                style: { color, weight: 2, opacity: 0.9, fillColor: color, fillOpacity: 0.2 },
+                pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 5, color, fillColor: color, fillOpacity: 0.9, pane: 'markerPane' }),
+                onEachFeature: (feature, layer) => layer.bindPopup(createFeaturePopup(feature))
+            });
+        }
+
+        // Returns false if the GeoJSON cannot be rendered; callers persist and refresh the UI
+        function addCustomOverlay(gj, name) {
+            const color = getNextOverlayColor();
+            let layer;
+            try { layer = createOverlayLayer(gj, color); } catch (_) { return false; }
+            if (layer.getLayers().length === 0) return false;
+            layer.addTo(map);
+            const ov = { name, layer, color, data: gj, isInteractive: true };
+            customOverlays.push(ov);
+            setOverlayInteractivity(ov, true);
+            return true;
+        }
+
         const CUSTOM_OVERLAYS_KEY = 'geolocator.customOverlays';
         function saveCustomOverlays() {
             try {
@@ -4266,11 +4332,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                     try {
                         const gj = item.data; // already parsed GeoJSON
                         const color = item.color || getNextOverlayColor();
-                        const layer = L.geoJSON(gj, {
-                            style: { color, weight: 2, opacity: 0.9, fillColor: color, fillOpacity: 0.2 },
-                            pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 5, color, fillColor: color, fillOpacity: 0.9, pane: 'markerPane' }),
-                        onEachFeature: (feature, layer) => { const idx = features.indexOf(feature); layer.bindPopup(createFeaturePopup(feature, idx >= 0 ? idx : null)); }
-                        });
+                        const layer = createOverlayLayer(gj, color);
                         // Always add to map at startup
                         if (map) layer.addTo(map);
                         const ov = { name: item.name, color, data: gj, layer, isInteractive: item.isInteractive !== false };
@@ -5807,133 +5869,83 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         }
 
         // Consume files shared via Web Share Target (stored in cache by SW)
+        let consumingSharedFiles = false;
         async function consumeSharedFiles() {
+            if (consumingSharedFiles) return;
+            consumingSharedFiles = true;
             try {
+                // Drop ?shared=1 so a reload or restored tab doesn't re-run the import flow
+                const url = new URL(location.href);
+                url.searchParams.delete('shared');
+                history.replaceState(history.state, '', url);
+
                 const cache = await caches.open('georoots-shared-files');
                 const keys = await cache.keys();
-                if (!keys || keys.length === 0) return;
-                // Load blobs
-                const entries = [];
+                const files = [];
                 for (const req of keys) {
                     const res = await cache.match(req);
                     if (!res) continue;
-                    const blob = await res.blob();
-                    const fname = res.headers.get('X-Filename') || 'shared.geojson';
-                    entries.push({ blob, name: fname });
+                    const rawName = res.headers.get('X-Filename') || '';
+                    let name;
+                    try { name = decodeURIComponent(rawName); } catch (_) { name = rawName; }
+                    files.push(new File([await res.blob()], name, { type: res.headers.get('Content-Type') || '' }));
                 }
-                // Clear after reading
                 await Promise.all(keys.map(k => cache.delete(k)));
-
-                if (entries.length === 0) return;
-                // If multiple files, handle one by one with choice modal
-                await importSharedEntriesWithChoice(entries);
+                await importFilesWithChoice(files);
             } catch (e) {
                 console.error('Failed to consume shared files', e);
+            } finally {
+                consumingSharedFiles = false;
             }
         }
 
-        async function importSharedEntriesWithChoice(entries) {
-            // Present choice modal; upon click, import accordingly
-            let idx = 0;
-            const modal = document.getElementById('importChoiceModal');
-            const close = () => { if (modal) modal.classList.add('hidden'); };
-            const btnAsFeatures = document.getElementById('btnImportAsFeatures');
-            const btnAsOverlay = document.getElementById('btnImportAsOverlay');
-            const btnCancel = document.getElementById('btnImportChoiceCancel');
-            const btnClose = document.getElementById('btnCloseImportChoice');
-
-            const handleEntry = async () => {
-                if (idx >= entries.length) { close(); return; }
-                const { blob, name } = entries[idx];
-                const file = new File([blob], name, { type: blob.type || 'application/geo+json' });
-                // Show modal and await choice
-                deactivateAllContexts();
-                modal.classList.remove('hidden');
-
-                await new Promise((resolve) => {
-                    const onFeatures = () => { importGeoJSONAsFeatures(file); cleanup(); resolve(); };
-                    const onOverlay = () => { handleOverlayFile(file); cleanup(); resolve(); };
-                    const onCancel = () => { cleanup(); resolve(); };
-                    function cleanup() {
-                        btnAsFeatures.removeEventListener('click', onFeatures);
-                        btnAsOverlay.removeEventListener('click', onOverlay);
-                        btnCancel.removeEventListener('click', onCancel);
-                        btnClose.removeEventListener('click', onCancel);
-                        close();
-                    }
-                    btnAsFeatures.addEventListener('click', onFeatures);
-                    btnAsOverlay.addEventListener('click', onOverlay);
-                    btnCancel.addEventListener('click', onCancel);
-                    btnClose.addEventListener('click', onCancel);
-                });
-
-                idx++;
-                await handleEntry();
-            };
-
-            await handleEntry();
+        // Ask once per batch how to import, then import all files that way
+        async function importFilesWithChoice(files) {
+            if (!files.length) { showToast(t('import.nothingReceived', 'No file was received')); return; }
+            const mode = await askImportMode(files.length);
+            if (mode) await importGeoJSONFiles(files, mode);
         }
 
-        // Load overlay
-        function handleOverlayFile(file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const gj = JSON.parse(e.target.result);
-                    initializeMapIfNeeded();
-                    const color = getNextOverlayColor();
-                    const layer = L.geoJSON(gj, {
-                        style: { 
-                            color, 
-                            weight: 2, 
-                            opacity: 0.9, 
-                            fillColor: color, 
-                            fillOpacity: 0.2
-                        },
-                        pointToLayer: (f, latlng) => L.circleMarker(latlng, { 
-                            radius: 5, 
-                            color, 
-                            fillColor: color, 
-                            fillOpacity: 0.9,
-                            pane: 'markerPane'
-                        }),
-                        onEachFeature: (feature, layer) => {
-                            layer.bindPopup(createFeaturePopup(feature));
-                        }
-                    }).addTo(map);
-                    const ov = { name: file.name, layer, color, data: gj, isInteractive: true };
-                    customOverlays.push(ov);
-                    setOverlayInteractivity(ov, true);
-                    saveCustomOverlays();
-                    ensureOverlaysOnTop();
-                    // Refresh overlay lists
-                    renderCustomOverlayOptions();
-                    if (document.getElementById('layersModal') && !document.getElementById('layersModal').classList.contains('hidden')) {
-                        renderLayerOptions();
-                    }
-                    showToast(t('overlay.loaded', `Overlay loaded: ${file.name}`, { name: file.name }));
-                } catch(err) { showToast(t('import.invalidGeojson', 'Invalid GeoJSON')); }
-            };
-            reader.readAsText(file);
+        // Resolves to 'features' | 'overlay' | null (cancelled). Button handlers are bound once
+        // below, so no stale per-call listeners can outlive the choice they were made for.
+        let resolveImportChoice = null;
+        function askImportMode(count) {
+            deactivateAllContexts(); // also cancels any choice still pending
+            document.getElementById('importChoiceMessage').textContent = count > 1
+                ? t('import.chooseMethodMultiple', `How would you like to import ${count} files?`, { count })
+                : t('import.chooseMethod', 'How would you like to import the file?');
+            document.getElementById('importChoiceModal').classList.remove('hidden');
+            return new Promise(resolve => {
+                resolveImportChoice = (mode) => {
+                    resolveImportChoice = null;
+                    document.getElementById('importChoiceModal').classList.add('hidden');
+                    resolve(mode);
+                };
+            });
+        }
+        const chooseImportMode = (mode) => { if (resolveImportChoice) resolveImportChoice(mode); };
+        document.getElementById('btnImportAsFeatures').onclick = () => chooseImportMode('features');
+        document.getElementById('btnImportAsOverlay').onclick = () => chooseImportMode('overlay');
+        document.getElementById('btnImportChoiceCancel').onclick = () => chooseImportMode(null);
+        document.getElementById('btnCloseImportChoice').onclick = () => chooseImportMode(null);
+
+        // The import mode is set on every open, so a cancelled picker can't leak its mode into the next one
+        function openImportPicker(mode) {
+            const input = document.getElementById('fileInput');
+            input.dataset.importType = mode;
+            input.click();
         }
 
         // Event listeners
         if (document.getElementById('btnCreatePoint')) document.getElementById('btnCreatePoint').onclick = () => showForm('Point');
         if (document.getElementById('btnCreatePolygon')) document.getElementById('btnCreatePolygon').onclick = () => showForm('Polygon');
-        document.getElementById('btnLoadOverlay').onclick = () => document.getElementById('fileInput').click();
+        document.getElementById('btnLoadOverlay').onclick = () => openImportPicker('overlay');
         if (document.getElementById('btnShowMap')) document.getElementById('btnShowMap').onclick = () => { pendingType = 'Point'; pendingProps = {}; showCapture(); };
         document.getElementById('fileInput').onchange = (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const mode = e.target.getAttribute('data-import-type') || 'overlay';
-                if (mode === 'features') {
-                    importGeoJSONAsFeatures(file);
-                } else {
-                    handleOverlayFile(file);
-                }
-            }
-            e.target.value='';
-            e.target.removeAttribute('data-import-type');
+            const files = Array.from(e.target.files || []);
+            const mode = e.target.dataset.importType === 'features' ? 'features' : 'overlay';
+            e.target.value = '';
+            importGeoJSONFiles(files, mode);
         };
         if (document.getElementById('btnExport')) document.getElementById('btnExport').onclick = exportGeoJSON;
 
@@ -6301,11 +6313,24 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             startTracking();
             updateOnlineStatus();
             
+            // Handle URL parameters for shortcuts and deep linking (before the SW update check,
+            // which can take seconds on a poor connection)
+            handleURLParams();
+
+            // Files opened with the app via manifest file_handlers ("Open with")
+            if ('launchQueue' in window) {
+                window.launchQueue.setConsumer(async ({ files }) => {
+                    if (!files || !files.length) return;
+                    try {
+                        await importFilesWithChoice(await Promise.all(files.map(handle => handle.getFile())));
+                    } catch (e) {
+                        console.error('Failed to open launched files', e);
+                    }
+                });
+            }
+            
             // Register service worker
             await registerServiceWorker();
-            
-            // Handle URL parameters for shortcuts and deep linking
-            handleURLParams();
             
             // Initialize tile cache
             try {
@@ -6346,7 +6371,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         document.getElementById('menuDownloadMaps').onclick = () => { deactivateAllContexts(); closeSidebar(); openCacheModal(); };
         document.getElementById('menuExportGeoJSON').onclick = () => { deactivateAllContexts(); closeSidebar(); exportGeoJSON(); };
         document.getElementById('menuExportCSV').onclick = () => { deactivateAllContexts(); closeSidebar(); exportCSV(); };
-        document.getElementById('menuImportGeoJSON').onclick = () => { deactivateAllContexts(); closeSidebar(); document.getElementById('fileInput').setAttribute('data-import-type','features'); document.getElementById('fileInput').click(); };
+        document.getElementById('menuImportGeoJSON').onclick = () => { deactivateAllContexts(); closeSidebar(); openImportPicker('features'); };
         document.getElementById('menuImportOverlay').onclick = () => { deactivateAllContexts(); closeSidebar(); openOverlaysModal(); };
         document.getElementById('menuSettings').onclick = () => { 
             deactivateAllContexts(); 
@@ -7043,6 +7068,3 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     </script>
 </body>
 </html>
-
-    </html>
-    </html>

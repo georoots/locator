@@ -1,5 +1,5 @@
 // GeoRoots Locator - Service Worker
-// Version 2.6.3
+// Version 2.6.3 - Walk-around polygon capture with automatic perimeter recording
 
 const CACHE_NAME = 'georoots-locator-v2.6.3';
 const STATIC_CACHE_NAME = 'georoots-locator-static-v2.6.3';
@@ -12,7 +12,8 @@ const STATIC_FILES = [
     './polygon-geometry.js',
     './translations-es.js',
     './translations-pt.js',
-    './translations-sw.js'
+    './translations-sw.js',
+    './translations-cs.js'
 ];
 
 // Install event - cache static files with validation (but don't activate yet)
@@ -66,7 +67,8 @@ async function validateAndCacheFiles() {
         console.log('Service Worker: Fetching and validating:', url);
         
         try {
-            const response = await fetch(url);
+            // Bypass the HTTP cache so a new SW version never bakes in stale app files
+            const response = await fetch(url, { cache: 'reload' });
             
             // Check response is OK
             if (!response.ok) {
@@ -180,30 +182,7 @@ self.addEventListener('fetch', event => {
     
     // Handle Web Share Target Level 2: POST with multipart files
     if (request.method === 'POST' && url.pathname.endsWith('/index.html')) {
-        event.respondWith((async () => {
-            try {
-                const formData = await request.clone().formData();
-                const files = formData.getAll('files');
-                // Store files temporarily in Cache Storage as blobs under a special key
-                const shareCache = await caches.open('georoots-shared-files');
-                // Clear previous
-                const keys = await shareCache.keys();
-                await Promise.all(keys.map(k => shareCache.delete(k)));
-                let idx = 0;
-                for (const f of files) {
-                    if (f && typeof f.arrayBuffer === 'function') {
-                        const ab = await f.arrayBuffer();
-                        const headers = new Headers({ 'Content-Type': f.type || 'application/octet-stream', 'X-Filename': f.name || `shared_${idx}.json` });
-                        await shareCache.put(`/__shared__/file_${idx}`, new Response(ab, { headers }));
-                        idx++;
-                    }
-                }
-                // Redirect to app with flag to consume shared files
-                return Response.redirect('./index.html?shared=1', 303);
-            } catch (e) {
-                return new Response('Failed to receive shared file', { status: 400 });
-            }
-        })());
+        event.respondWith(receiveSharedFiles(request));
         return;
     }
 
@@ -308,6 +287,34 @@ self.addEventListener('fetch', event => {
             })
     );
 });
+
+// Store shared files in Cache Storage for the page to pick up, then redirect to the app.
+// Always redirects (even on failure) so the user lands in the app rather than on an error page.
+async function receiveSharedFiles(request) {
+    try {
+        const shareCache = await caches.open('georoots-shared-files');
+        await Promise.all((await shareCache.keys()).map(k => shareCache.delete(k)));
+
+        const formData = await request.formData();
+        const files = formData.getAll('files').filter(f => f && typeof f.arrayBuffer === 'function');
+        // Some apps share GeoJSON content as plain text instead of a file
+        const text = String(formData.get('text') || '').trim();
+        if (files.length === 0 && text.startsWith('{')) {
+            files.push(new File([text], 'shared.geojson', { type: 'application/geo+json' }));
+        }
+
+        await Promise.all(files.map((f, idx) => shareCache.put(`/__shared__/file_${idx}`, new Response(f, {
+            headers: {
+                'Content-Type': f.type || 'application/octet-stream',
+                // Header values must be ISO-8859-1, so non-Latin file names have to be encoded
+                'X-Filename': encodeURIComponent(f.name || `shared_${idx + 1}.geojson`)
+            }
+        }))));
+    } catch (e) {
+        console.error('Service Worker: Failed to receive shared files', e);
+    }
+    return Response.redirect('./index.html?shared=1', 303);
+}
 
 // Helper functions
 function isAppShellRequest(request) {
