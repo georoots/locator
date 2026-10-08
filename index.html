@@ -1162,9 +1162,25 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         .menu-title { color: var(--primary-color); font-weight: 700; margin: 8px 4px; }
         .menu-item { display: flex; align-items: center; justify-content: space-between; width: 100%; background: var(--gray-light); border: 1px solid var(--gray-border); color: var(--text-color); border-radius: 8px; padding: 10px 12px; cursor: pointer; margin: 6px 0; font-weight: 400; }
         .menu-item:hover { background: #e9f5ef; }
-        .submenu { margin-left: 6px; padding-left: 6px; border-left: 2px solid var(--gray-border); display: none; }
-        .submenu.show { display: block; }
-        .submenu .menu-item { background: var(--white); }
+        /* Sidebar map switcher */
+        .base-layer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 6px 0; }
+        .base-layer-chip { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 8px; border: 1px solid var(--gray-border); border-radius: 8px; background: var(--gray-light); color: var(--text-color); font: inherit; font-size: 13px; text-align: left; line-height: 1.2; cursor: pointer; }
+        .base-layer-chip.active { border-color: var(--primary-color); background: #e9f5ef; box-shadow: inset 0 0 0 1px var(--primary-color); font-weight: 600; }
+        .layer-thumb { flex: none; width: 24px; height: 24px; border-radius: 6px; border: 1px solid rgba(0,0,0,0.15); }
+        .layer-thumb.street { background: linear-gradient(120deg, transparent 44%, #fff 44% 56%, transparent 56%), linear-gradient(30deg, transparent 62%, #f6d58e 62% 72%, transparent 72%), #e9e4da; }
+        .layer-thumb.topo { background: repeating-radial-gradient(circle at 30% 70%, #d5e6c6 0 3px, #a9c48f 3px 4px); }
+        .layer-thumb.satellite { background: radial-gradient(circle at 28% 30%, #5d823b 0 28%, transparent 30%), radial-gradient(circle at 75% 72%, #34522a 0 34%, transparent 36%), #6f6a48; }
+        .layer-thumb.satellite2020 { background: radial-gradient(circle at 28% 30%, #5d823b 0 28%, transparent 30%), radial-gradient(circle at 75% 72%, #34522a 0 34%, transparent 36%), #6f6a48; filter: sepia(0.7); }
+        .overlay-toggles { border: 1px solid var(--gray-border); border-radius: 8px; background: var(--gray-light); margin: 6px 0; }
+        .overlay-toggle { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 10px; font-size: 13px; cursor: pointer; }
+        .overlay-toggle + .overlay-toggle { border-top: 1px solid var(--gray-border); }
+        .overlay-toggle .legend-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; }
+        .overlay-toggle .overlay-name { flex: 1; }
+        .switch { appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 36px; height: 20px; margin: 0; border-radius: 999px; background: #c4cbd1; cursor: pointer; transition: background 0.15s; }
+        .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.3); transition: transform 0.15s; }
+        .switch:checked { background: var(--primary-color); }
+        .switch:checked::after { transform: translateX(16px); }
+        .switch:focus-visible, .base-layer-chip:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
 
         /* Location picker overlay */
         /* CRITICAL: Overlay covers #mainView. Since all siblings of #map (accuracy bubble, toolbars) 
@@ -1417,16 +1433,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         <div class="sidebar-content">
             <div class="menu-section">
                 <div class="menu-title" data-i18n="menu.locations">Locations</div>
-                <button class="menu-item" id="toggleAddPoint"><span data-i18n="menu.addPoint">Add Point</span><span>▸</span></button>
-                <div id="submenuAddPoint" class="submenu">
-                    <button class="menu-item" id="menuAddPointCurrent" data-i18n="menu.fromCurrentLocation">From current location</button>
-                    <button class="menu-item" id="menuAddPointSelect" data-i18n="menu.selectOnMap">Select on map</button>
-                </div>
-                <button class="menu-item" id="toggleAddPolygon"><span data-i18n="menu.addPolygon">Add Polygon</span><span>▸</span></button>
-                <div id="submenuAddPolygon" class="submenu">
-                    <button class="menu-item" id="menuAddPolygonCurrent" data-i18n="menu.fromCurrentLocation">From current location</button>
-                    <button class="menu-item" id="menuAddPolygonSelect" data-i18n="menu.selectOnMap">Select on map</button>
-                </div>
+                <button class="menu-item" id="menuAddPoint" data-i18n="menu.addPoint">Add Point</button>
+                <button class="menu-item" id="menuAddPolygon" data-i18n="menu.addPolygon">Add Polygon</button>
                 <button class="menu-item" id="menuManageFeatures" data-i18n="menu.manageFeatures">Manage Features</button>
             </div>
             <div class="menu-section">
@@ -1437,7 +1445,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             </div>
             <div class="menu-section">
                 <div class="menu-title" data-i18n="menu.maps">Maps</div>
-                <button class="menu-item" id="menuMapLayers" data-i18n="menu.mapLayers">Map Layers</button>
+                <div class="base-layer-grid" id="baseLayerOptions" role="radiogroup" aria-label="Base Maps" data-i18n-aria-label="layers.baseMaps"></div>
+                <div class="overlay-toggles" id="overlayOptions" role="group" aria-label="Overlays" data-i18n-aria-label="layers.overlays"></div>
                 <button class="menu-item" id="menuDownloadMaps" data-i18n="menu.downloadMaps">Download Maps</button>
             </div>
             <div class="menu-section">
@@ -1540,24 +1549,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         
     </section>
 
-    <!-- Layers modal (without Custom Overlays) -->
-    <div id="layersModal" class="modal hidden" role="dialog" aria-modal="true">
-        <div class="modal-card">
-            <div class="modal-header">
-                <div data-i18n="layers.title">Map Layers</div>
-                <button class="btn btn-light btn-small" id="btnCloseLayers" data-i18n="common.close">Close</button>
-            </div>
-            <div class="modal-body">
-                <div style="font-weight:700; margin-bottom:6px;" data-i18n="layers.baseMaps">Base Maps</div>
-                <div id="baseLayerOptions"></div>
-                <hr style="margin:10px 0; border:none; border-top:1px solid var(--border-color);">
-                <div style="font-weight:700; margin-bottom:6px;" data-i18n="layers.overlays">Overlays</div>
-                <div id="overlayOptions"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Custom Overlays modal (moved from Layers) -->
+    <!-- Custom Overlays modal -->
     <div id="overlaysModal" class="modal hidden" role="dialog" aria-modal="true">
         <div class="modal-card">
             <div class="modal-header">
@@ -1750,25 +1742,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         </div>
     </div>
 
-    <!-- Polygon capture method chooser -->
-    <div id="captureMethodModal" class="modal hidden" role="dialog" aria-modal="true">
+    <!-- Capture method chooser (options rendered per feature type) -->
+    <div id="captureMethodModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="captureMethodTitle">
         <div class="modal-card">
             <div class="modal-header">
-                <div data-i18n="capture.methodTitle">How to capture the polygon</div>
+                <div id="captureMethodTitle"></div>
                 <button class="btn btn-light btn-small" id="btnCloseCaptureMethod" data-i18n="common.close">Close</button>
             </div>
             <div class="modal-body">
-                <div style="font-size:13px; color:var(--gray-dark); margin-bottom: 8px;" data-i18n="capture.methodDescription">Choose manual corner capture or automatic perimeter recording while you walk the boundary.</div>
-                <div class="capture-method-options">
-                    <button type="button" class="capture-method-option" id="btnCaptureMethodManual">
-                        <div class="capture-method-option-title" data-i18n="capture.manualTitle">Manual corners</div>
-                        <div class="capture-method-option-desc" data-i18n="capture.manualDescription">Walk to each corner and tap Add Vertex. Best for small or irregular shapes.</div>
-                    </button>
-                    <button type="button" class="capture-method-option" id="btnCaptureMethodAuto">
-                        <div class="capture-method-option-title" data-i18n="capture.autoTitle">Automatic perimeter</div>
-                        <div class="capture-method-option-desc" data-i18n="capture.autoDescription">Walk the boundary while GPS points are recorded automatically. Review and confirm the cleaned polygon before saving.</div>
-                    </button>
-                </div>
+                <div class="capture-method-options" id="captureMethodOptions"></div>
             </div>
         </div>
     </div>
@@ -2062,7 +2044,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         let pendingCaptureMode = null; // 'current' | 'select'
         let pendingPolygonCaptureMethod = 'manual'; // 'manual' | 'auto'
         let polygonRecordingSession = null;
-        let captureMethodContext = null; // 'primary' | 'supplemental'
         let recordingTrackLayer = null;
         let recordingPreviewLayers = { raw: null, cleaned: null };
         let currentPolygon = []; // [[lng,lat],...]
@@ -2285,8 +2266,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 'menu.main': 'Main Menu',
                 'menu.locations': 'Locations',
                 'menu.addPoint': 'Add Point',
-                'menu.fromCurrentLocation': 'From current location',
-                'menu.selectOnMap': 'Select on map',
                 'menu.addPolygon': 'Add Polygon',
                 'menu.manageFeatures': 'Manage Features',
                 'menu.importExport': 'Import/Export',
@@ -2294,7 +2273,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 'menu.exportGeojson': 'Export GeoJSON',
                 'menu.exportCsv': 'Export CSV',
                 'menu.maps': 'Maps',
-                'menu.mapLayers': 'Map Layers',
                 'menu.downloadMaps': 'Download Maps',
                 'menu.other': 'Other',
                 'menu.locationPicker': 'Location picker',
@@ -2308,10 +2286,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 'common.delete': 'Delete',
                 'common.view': 'View',
                 'common.capture': 'Capture',
-                'common.draw': 'Draw',
-                'common.captureFromGps': 'Capture from GPS',
-                'common.redraw': 'Re-Draw',
-                'common.recaptureFromGps': 'Re-Capture from GPS',
+                'common.recapture': 'Re-capture',
                 'common.replace': 'Replace',
                 'common.shape': 'Re-draw',
                 'common.save': 'Save',
@@ -2416,7 +2391,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 'settings.noExportProperties': 'No export properties defined.',
                 'settings.languageUnavailable': 'Saved language "{language}" is not available. Using English.',
                 'settings.profileUnavailable': 'Saved additional fields "{profile}" is not available. Using None.',
-                'layers.title': 'Map Layers',
                 'layers.baseMaps': 'Base Maps',
                 'layers.overlays': 'Overlays',
                 'layers.customOverlays': 'Custom Overlays',
@@ -2429,6 +2403,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 'layer.satellite2020': 'Satellite 2020 (Esri Wayback)',
                 'layer.forestCoverage': 'Forest Coverage (GFC 2020v2)',
                 'layer.treeCoverLoss': 'Tree Cover Loss (2021-2024)',
+                'layer.short.street': 'Street',
+                'layer.short.topo': 'Topo',
+                'layer.short.satellite': 'Satellite',
+                'layer.short.satellite2020': 'Satellite 2020',
+                'layer.short.forestCoverage': 'Forest 2020',
+                'layer.short.treeCoverLoss': 'Tree loss 2021–24',
                 'cache.title': 'Offline Maps',
                 'cache.downloadNew': 'Download New Map',
                 'cache.storageUsage': 'Storage Usage',
@@ -2534,14 +2514,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 'map.notInitialized': 'Map not initialized',
                 'map.currentLocation': 'Your current location',
                 'capture.walkCorners': 'Walk to each corner and tap Add Vertex',
-                'capture.drawEdit': 'Move map and edit vertices, then tap Finish',
                 'capture.drawNew': 'Move map, add vertices, then tap Finish',
                 'capture.editShape': 'Edit polygon shape, then tap Finish',
+                'capture.pointMethodTitle': 'How to capture the point',
+                'capture.pointSelectTitle': 'Select on map',
+                'capture.pointSelectDescription': 'Move the map to place the point under the crosshair. Works without a GPS fix.',
+                'capture.pointCurrentTitle': 'Capture from current location',
+                'capture.pointCurrentDescription': 'Save the GPS position where you are standing. Wait for good accuracy first.',
                 'capture.methodTitle': 'How to capture the polygon',
-                'capture.methodDescription': 'Choose manual corner capture or automatic perimeter recording while you walk the boundary.',
-                'capture.manualTitle': 'Manual corners',
+                'capture.drawTitle': 'Draw on map',
+                'capture.drawDescription': 'Tap the corners on the map. Best when the boundary is visible on satellite imagery.',
+                'capture.manualTitle': 'Walk and capture vertices',
                 'capture.manualDescription': 'Walk to each corner and tap Add Vertex. Best for small or irregular shapes.',
-                'capture.autoTitle': 'Automatic perimeter',
+                'capture.autoTitle': 'Walk and auto-capture',
                 'capture.autoDescription': 'Walk the boundary while GPS points are recorded automatically. Review and confirm the cleaned polygon before saving.',
                 'recording.start': 'Start',
                 'recording.pause': 'Pause',
@@ -2667,7 +2652,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         function refreshTranslatedUi() {
             applyTranslations();
             renderLanguageOptions();
-            if (map) renderLayerOptions();
+            renderLayerOptions();
             renderFeatureList();
             if (!document.getElementById('manageFeaturesModal').classList.contains('hidden')) renderManageFeatures();
             if (!document.getElementById('cacheModal').classList.contains('hidden')) {
@@ -3483,7 +3468,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 saveCustomOverlays();
                 ensureOverlaysOnTop();
                 renderCustomOverlayOptions();
-                if (!document.getElementById('layersModal').classList.contains('hidden')) renderLayerOptions();
             }
 
             const messages = [];
@@ -4130,13 +4114,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         }
 
         // Modal and UI functions
-        function openLayersModal() {
-            initializeMapIfNeeded();
-            document.getElementById('layersModal').classList.remove('hidden');
-            renderLayerOptions();
-        }
-        
-        function closeLayersModal() { document.getElementById('layersModal').classList.add('hidden'); }
         function openOverlaysModal() { document.getElementById('overlaysModal').classList.remove('hidden'); renderCustomOverlayOptions(); }
         function closeOverlaysModal() { document.getElementById('overlaysModal').classList.add('hidden'); }
         
@@ -4153,7 +4130,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         // Unified: hide all modals and cancel any active interactions/selections
         function deactivateAllContexts() {
             // Hide all modals/sheets that may be visible
-            ['layersModal','overlaysModal','cacheModal','manageFeaturesModal','aboutModal','cacheSelectionModal','featureForm','exportModal','importChoiceModal','captureMethodModal','recordingWarningModal']
+            ['overlaysModal','cacheModal','manageFeaturesModal','aboutModal','cacheSelectionModal','featureForm','exportModal','importChoiceModal','captureMethodModal','recordingWarningModal']
                 .forEach((id) => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
             if (resolveImportChoice) resolveImportChoice(null);
 
@@ -4221,36 +4198,67 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             } catch (_) {}
         }
 
+        const LAYER_SWITCHER_STYLE = {
+            'Street (OSM)': { key: 'layer.short.street', label: 'Street', thumb: 'street' },
+            'Topo (OpenTopoMap)': { key: 'layer.short.topo', label: 'Topo', thumb: 'topo' },
+            'Satellite (Esri)': { key: 'layer.short.satellite', label: 'Satellite', thumb: 'satellite' },
+            'Satellite 2020 (Esri Wayback)': { key: 'layer.short.satellite2020', label: 'Satellite 2020', thumb: 'satellite2020' },
+            'Forest Coverage (GFC 2020v2)': { key: 'layer.short.forestCoverage', label: 'Forest 2020', color: '#0b4f1c' },
+            'Tree Cover Loss (2021-2024)': { key: 'layer.short.treeCoverLoss', label: 'Tree loss 2021–24', color: '#e4475d' }
+        };
+
+        function getLayerShortName(name) {
+            const style = LAYER_SWITCHER_STYLE[name];
+            return style ? t(style.key, style.label) : getLayerDisplayName(name);
+        }
+
+        // Sidebar map switcher; base maps act as a radio group, overlays as switches
         function renderLayerOptions() {
             const baseC = document.getElementById('baseLayerOptions');
             const ovrC = document.getElementById('overlayOptions');
-            const customC = document.getElementById('customOverlayOptions');
-            if (baseC) baseC.innerHTML='';
-            if (ovrC) ovrC.innerHTML='';
-            if (customC) customC.innerHTML='';
-            
-            if (baseC) {
-                Object.keys(baseLayers).forEach(name => {
-                    const row = document.createElement('div'); row.className = 'layer-row';
-                    const radio = document.createElement('input'); radio.type='radio'; radio.name='basemap'; 
-                    radio.checked = map ? map.hasLayer(baseLayers[name]) : (name === Object.keys(baseLayers)[0]);
-                    radio.onchange = () => switchBaseLayer(name);
-                    const label = document.createElement('label'); label.textContent = getLayerDisplayName(name);
-                    row.appendChild(radio); row.appendChild(label); baseC.appendChild(row);
-                });
-            }
-            
-            if (ovrC) {
-                Object.keys(overlayMaps).forEach(name => {
-                    const row = document.createElement('div'); row.className = 'layer-row';
-                    const cb = document.createElement('input'); cb.type='checkbox'; 
-                    cb.checked = map ? map.hasLayer(overlayMaps[name]) : false;
-                    cb.onchange = () => toggleOverlay(name, cb.checked);
-                    const label = document.createElement('label'); label.textContent = getLayerDisplayName(name);
-                    row.appendChild(cb); row.appendChild(label); ovrC.appendChild(row);
-                });
-            }
-            if (customC) renderCustomOverlayOptions();
+            if (!baseC || !ovrC) return;
+            initializeLayerDefinitions();
+            const activeBase = map
+                ? Object.keys(baseLayers).find(name => map.hasLayer(baseLayers[name]))
+                : loadBaseLayerName() || Object.keys(baseLayers)[0];
+            const activeOverlays = map
+                ? Object.keys(overlayMaps).filter(name => map.hasLayer(overlayMaps[name]))
+                : loadOverlayState();
+
+            baseC.replaceChildren(...Object.keys(baseLayers).map(name => {
+                const chip = document.createElement('button');
+                chip.type = 'button';
+                chip.className = 'base-layer-chip' + (name === activeBase ? ' active' : '');
+                chip.setAttribute('role', 'radio');
+                chip.setAttribute('aria-checked', String(name === activeBase));
+                chip.title = getLayerDisplayName(name);
+                const thumb = document.createElement('span');
+                thumb.className = `layer-thumb ${LAYER_SWITCHER_STYLE[name]?.thumb || ''}`;
+                const label = document.createElement('span');
+                label.textContent = getLayerShortName(name);
+                chip.append(thumb, label);
+                chip.onclick = () => { switchBaseLayer(name); renderLayerOptions(); };
+                return chip;
+            }));
+
+            ovrC.replaceChildren(...Object.keys(overlayMaps).map(name => {
+                const row = document.createElement('label');
+                row.className = 'overlay-toggle';
+                row.title = getLayerDisplayName(name);
+                const dot = document.createElement('span');
+                dot.className = 'legend-dot';
+                dot.style.background = LAYER_SWITCHER_STYLE[name]?.color || '#999';
+                const label = document.createElement('span');
+                label.className = 'overlay-name';
+                label.textContent = getLayerShortName(name);
+                const toggle = document.createElement('input');
+                toggle.type = 'checkbox';
+                toggle.className = 'switch';
+                toggle.checked = activeOverlays.includes(name);
+                toggle.onchange = () => toggleOverlay(name, toggle.checked);
+                row.append(dot, label, toggle);
+                return row;
+            }));
         }
 
         function renderCustomOverlayOptions() {
@@ -4584,7 +4592,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
         function showForm(type) {
             pendingType = type; pendingProps = null; editingIndex = null;
-            pendingPolygonCaptureMethod = 'manual';
             formSupplementalValues = {};
             const localizedType = getFeatureTypeLabel(type);
             document.getElementById('formTitle').textContent = t('feature.newType', `New ${localizedType}`, { type: localizedType });
@@ -4729,20 +4736,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             const actions = document.createElement('div');
             actions.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;';
 
-            const drawBtn = document.createElement('button');
-            drawBtn.type = 'button';
-            drawBtn.className = 'btn btn-primary btn-small';
-            drawBtn.textContent = hasValidPolygon ? t('common.redraw', 'Re-Draw') : t('common.draw', 'Draw');
-            drawBtn.onclick = () => startSupplementalPolygonCapture(field, null, 'draw');
-            actions.appendChild(drawBtn);
-
             const captureBtn = document.createElement('button');
             captureBtn.type = 'button';
-            captureBtn.className = 'btn btn-light btn-small';
-            captureBtn.textContent = hasValidPolygon
-                ? t('common.recaptureFromGps', 'Re-Capture from GPS')
-                : t('common.captureFromGps', 'Capture from GPS');
-            captureBtn.onclick = () => startSupplementalPolygonCapture(field, null, 'gps');
+            captureBtn.className = 'btn btn-primary btn-small';
+            captureBtn.textContent = hasValidPolygon ? t('common.recapture', 'Re-capture') : t('common.capture', 'Capture');
+            captureBtn.onclick = () => openCaptureMethodChooser('Polygon', 'supplemental', field);
             actions.appendChild(captureBtn);
 
             if (hasArea || values.geometry) {
@@ -4840,24 +4838,25 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         }
         window.toggleSupplementalPolygonOverlay = toggleSupplementalPolygonOverlay;
 
-        function startSupplementalPolygonCapture(field, existingPolygonFeature = null, mode = 'draw') {
-            supplementalCaptureContext = { field, mode };
+        // method: 'select' (draw on map) | 'manual' (walk, tap vertices) | 'auto' (walk, recorded)
+        function startSupplementalPolygonCapture(field, method) {
+            supplementalCaptureContext = { field, mode: method };
             geometryEditContext = null;
-            const existingRing = getPolygonRingFromFeature(existingPolygonFeature);
-            currentPolygon = existingRing ? existingRing.slice(0, -1) : [];
+            currentPolygon = [];
             document.getElementById('featureForm').classList.add('hidden');
             document.getElementById('mainView').classList.remove('hidden');
             initializeMapIfNeeded();
             clearSupplementalPreviewLayer();
             drawFeaturesOnMap();
             redrawWorkingPolyline();
-            if (mode === 'gps') {
-                openPolygonCaptureMethodChooser('supplemental');
+            if (method === 'auto') {
+                openAutomaticPolygonRecording('supplemental');
+            } else if (method === 'manual') {
+                openSupplementalPolygonGpsCapture();
+                showToast(t('capture.walkCorners', 'Walk to each corner and tap Add Vertex'));
             } else {
                 openPolygonFromMapPicker();
-                showToast(existingRing
-                    ? t('capture.drawEdit', 'Move map and edit vertices, then tap Finish')
-                    : t('capture.drawNew', 'Move map, add vertices, then tap Finish'));
+                showToast(t('capture.drawNew', 'Move map, add vertices, then tap Finish'));
             }
         }
 
@@ -5081,49 +5080,85 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             };
         }
 
-        function openPolygonCaptureMethodChooser(context) {
-            captureMethodContext = context;
+        // Translation keys are `${key}Title` and `${key}Description`
+        const CAPTURE_METHODS = {
+            Point: [
+                { id: 'select', key: 'capture.pointSelect', title: 'Select on map', description: 'Move the map to place the point under the crosshair. Works without a GPS fix.' },
+                { id: 'current', key: 'capture.pointCurrent', title: 'Capture from current location', description: 'Save the GPS position where you are standing. Wait for good accuracy first.' }
+            ],
+            Polygon: [
+                { id: 'select', key: 'capture.draw', title: 'Draw on map', description: 'Tap the corners on the map. Best when the boundary is visible on satellite imagery.' },
+                { id: 'manual', key: 'capture.manual', title: 'Walk and capture vertices', description: 'Walk to each corner and tap Add Vertex. Best for small or irregular shapes.' },
+                { id: 'auto', key: 'capture.auto', title: 'Walk and auto-capture', description: 'Walk the boundary while GPS points are recorded automatically. Review and confirm the cleaned polygon before saving.' }
+            ]
+        };
+
+        // { type: 'Point'|'Polygon', context: 'primary'|'supplemental', field } while choosing
+        let captureMethodRequest = null;
+
+        function openCaptureMethodChooser(type, context = 'primary', field = null) {
+            captureMethodRequest = { type, context, field };
+            document.getElementById('captureMethodTitle').textContent = type === 'Point'
+                ? t('capture.pointMethodTitle', 'How to capture the point')
+                : t('capture.methodTitle', 'How to capture the polygon');
+            document.getElementById('captureMethodOptions').replaceChildren(...CAPTURE_METHODS[type].map(method => {
+                const option = document.createElement('button');
+                option.type = 'button';
+                option.className = 'capture-method-option';
+                const title = document.createElement('div');
+                title.className = 'capture-method-option-title';
+                title.textContent = t(`${method.key}Title`, method.title);
+                const description = document.createElement('div');
+                description.className = 'capture-method-option-desc';
+                description.textContent = t(`${method.key}Description`, method.description);
+                option.append(title, description);
+                option.onclick = () => chooseCaptureMethod(method.id);
+                return option;
+            }));
+            // The form sheet sits above modals, so hide it while choosing for a form field
             document.getElementById('featureForm').classList.add('hidden');
-            document.getElementById('mainView').classList.remove('hidden');
-            initializeMapIfNeeded();
-            updateCurrentLocationOnMap();
-            showAccuracyBubble();
-            document.getElementById('captureToolbarPoint').classList.add('hidden');
-            document.getElementById('captureToolbarPolygon').classList.add('hidden');
-            hideAutoRecordingToolbar();
-            hideRecordingReviewToolbar();
             document.getElementById('captureMethodModal').classList.remove('hidden');
         }
 
-        function closePolygonCaptureMethodChooser() {
+        function hideCaptureMethodDialogs() {
             document.getElementById('captureMethodModal').classList.add('hidden');
-            captureMethodContext = null;
+            document.getElementById('recordingWarningModal').classList.add('hidden');
         }
 
-        function beginManualPolygonCaptureFromChooser() {
-            pendingPolygonCaptureMethod = 'manual';
-            closePolygonCaptureMethodChooser();
-            if (captureMethodContext === 'supplemental') {
-                openSupplementalManualGpsCapture();
-            } else {
-                showCapture();
-            }
+        // User backed out of choosing: return to where they came from
+        function dismissCaptureMethodChooser() {
+            const request = captureMethodRequest;
+            captureMethodRequest = null;
+            hideCaptureMethodDialogs();
+            if (request?.context === 'supplemental') document.getElementById('featureForm').classList.remove('hidden');
         }
 
-        function beginAutomaticPolygonCaptureFromChooser() {
-            pendingPolygonCaptureMethod = 'auto';
-            closePolygonCaptureMethodChooser();
-            const settings = loadSettings();
-            if (!settings.polygonRecording?.warningDismissed) {
+        function chooseCaptureMethod(method) {
+            if (!captureMethodRequest) return;
+            hideCaptureMethodDialogs();
+            if (method === 'auto' && !getPolygonRecordingConfig().warningDismissed) {
                 document.getElementById('recordingWarningDismiss').checked = false;
                 document.getElementById('recordingWarningModal').classList.remove('hidden');
                 return;
             }
-            openAutomaticPolygonRecording(captureMethodContext);
+            startChosenCapture(method);
         }
 
-        function openAutomaticPolygonRecording(context) {
-            polygonRecordingSession = createPolygonRecordingSession(context || captureMethodContext || 'primary');
+        function startChosenCapture(method) {
+            const { type, context, field } = captureMethodRequest;
+            captureMethodRequest = null;
+            hideCaptureMethodDialogs();
+            if (context === 'supplemental') {
+                startSupplementalPolygonCapture(field, method);
+                return;
+            }
+            pendingCaptureMode = method === 'select' ? 'select' : 'current';
+            pendingPolygonCaptureMethod = method === 'auto' ? 'auto' : 'manual';
+            showForm(type);
+        }
+
+        function openAutomaticPolygonRecording(context = 'primary') {
+            polygonRecordingSession = createPolygonRecordingSession(context);
             document.getElementById('featureForm').classList.add('hidden');
             document.getElementById('mainView').classList.remove('hidden');
             initializeMapIfNeeded();
@@ -5379,13 +5414,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 hideAutoRecordingToolbar();
                 hideRecordingReviewToolbar();
             }
-            document.getElementById('recordingWarningModal').classList.add('hidden');
-            closePolygonCaptureMethodChooser();
-        }
-
-        function openSupplementalManualGpsCapture() {
-            openSupplementalPolygonGpsCapture();
-            showToast(t('capture.walkCorners', 'Walk to each corner and tap Add Vertex'));
+            captureMethodRequest = null;
+            hideCaptureMethodDialogs();
         }
 
         function showCapture() {
@@ -5937,8 +5967,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         }
 
         // Event listeners
-        if (document.getElementById('btnCreatePoint')) document.getElementById('btnCreatePoint').onclick = () => showForm('Point');
-        if (document.getElementById('btnCreatePolygon')) document.getElementById('btnCreatePolygon').onclick = () => showForm('Polygon');
         document.getElementById('btnLoadOverlay').onclick = () => openImportPicker('overlay');
         if (document.getElementById('btnShowMap')) document.getElementById('btnShowMap').onclick = () => { pendingType = 'Point'; pendingProps = {}; showCapture(); };
         document.getElementById('fileInput').onchange = (e) => {
@@ -5962,12 +5990,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 showToast(t('toast.featureUpdated', 'Feature updated'));
             } else {
                 pendingProps = updatedProps;
-                if (pendingType === 'Polygon' && pendingCaptureMode === 'current') {
-                    openPolygonCaptureMethodChooser('primary');
-                } else {
-                    pendingPolygonCaptureMethod = 'manual';
-                    showCapture();
-                }
+                showCapture();
             }
         };
 
@@ -5982,12 +6005,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         document.getElementById('btnFinishPolygon').onclick = finishPolygon;
         document.getElementById('btnCancelCapturePolygon').onclick = () => { supplementalCaptureContext = null; geometryEditContext = null; currentPolygon = []; clearWorkingPolyline(); stopPolygonRecordingSession(false); showMainView(); hideAccuracyBubble(); };
 
-        document.getElementById('btnCaptureMethodManual').onclick = beginManualPolygonCaptureFromChooser;
-        document.getElementById('btnCaptureMethodAuto').onclick = beginAutomaticPolygonCaptureFromChooser;
-        document.getElementById('btnCloseCaptureMethod').onclick = () => {
-            closePolygonCaptureMethodChooser();
-            document.getElementById('featureForm').classList.remove('hidden');
-        };
+        document.getElementById('btnCloseCaptureMethod').onclick = dismissCaptureMethodChooser;
         document.getElementById('btnRecordingStart').onclick = startPolygonRecording;
         document.getElementById('btnRecordingPause').onclick = pausePolygonRecording;
         document.getElementById('btnRecordingResume').onclick = resumePolygonRecording;
@@ -5996,15 +6014,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             cancelPolygonRecording();
             showToast(t('recording.toastCancelled', 'Recording cancelled'));
         };
-        document.getElementById('btnCloseRecordingWarning').onclick = () => {
-            document.getElementById('recordingWarningModal').classList.add('hidden');
-            openPolygonCaptureMethodChooser(captureMethodContext || 'primary');
+        const backToCaptureMethodChooser = () => {
+            const request = captureMethodRequest;
+            if (request) openCaptureMethodChooser(request.type, request.context, request.field);
+            else hideCaptureMethodDialogs();
         };
-        document.getElementById('btnRecordingWarningCancel').onclick = () => {
-            document.getElementById('recordingWarningModal').classList.add('hidden');
-            openPolygonCaptureMethodChooser(captureMethodContext || 'primary');
-        };
+        document.getElementById('btnCloseRecordingWarning').onclick = backToCaptureMethodChooser;
+        document.getElementById('btnRecordingWarningCancel').onclick = backToCaptureMethodChooser;
         document.getElementById('btnRecordingWarningContinue').onclick = () => {
+            if (!captureMethodRequest) { hideCaptureMethodDialogs(); return; }
             const dismiss = document.getElementById('recordingWarningDismiss').checked;
             if (dismiss) {
                 const s = loadSettings();
@@ -6013,8 +6031,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 const showWarn = document.getElementById('settingsShowRecordingWarning');
                 if (showWarn) showWarn.checked = false;
             }
-            document.getElementById('recordingWarningModal').classList.add('hidden');
-            openAutomaticPolygonRecording(captureMethodContext || 'primary');
+            startChosenCapture('auto');
         };
         document.getElementById('btnRecordingReviewRetry').onclick = resumeRecordingAfterReview;
         document.getElementById('btnRecordingReviewStartOver').onclick = startOverRecordingAfterReview;
@@ -6031,8 +6048,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             }
         });
 
-        if (document.getElementById('btnLayers')) document.getElementById('btnLayers').onclick = openLayersModal;
-        document.getElementById('btnCloseLayers').onclick = closeLayersModal;
         document.getElementById('btnCloseOverlays').onclick = closeOverlaysModal;
         document.getElementById('btnClearOverlays').onclick = () => { customOverlays.forEach(ov => map && map.removeLayer(ov.layer)); customOverlays = []; saveCustomOverlays(); if (document.getElementById('overlaysModal') && !document.getElementById('overlaysModal').classList.contains('hidden')) { renderCustomOverlayOptions(); } };
 
@@ -6221,7 +6236,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             
             switch (action) {
                 case 'create-point':
-                    showForm('Point');
+                    openCaptureMethodChooser('Point');
                     break;
                 case 'show-map':
                     pendingType = 'Point';
@@ -6346,22 +6361,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         const sidebar = document.getElementById('sidebar');
         const sidebarOverlay = document.getElementById('sidebarOverlay');
         const btnMenu = document.getElementById('btnMenu');
-        function openSidebar() { sidebar.classList.add('open'); sidebarOverlay.classList.add('show'); }
+        function openSidebar() { renderLayerOptions(); sidebar.classList.add('open'); sidebarOverlay.classList.add('show'); }
         function closeSidebar() { sidebar.classList.remove('open'); sidebarOverlay.classList.remove('show'); }
         btnMenu.addEventListener('click', openSidebar);
         sidebarOverlay.addEventListener('click', closeSidebar);
 
-        // Collapsible submenus
-        function toggleSubmenu(toggleBtnId, submenuId) {
-            const btn = document.getElementById(toggleBtnId);
-            const submenu = document.getElementById(submenuId);
-            if (btn && submenu) btn.addEventListener('click', () => { submenu.classList.toggle('show'); });
-        }
-        toggleSubmenu('toggleAddPoint', 'submenuAddPoint');
-        toggleSubmenu('toggleAddPolygon', 'submenuAddPolygon');
-
         // Menu actions
-        document.getElementById('menuMapLayers').onclick = () => { deactivateAllContexts(); closeSidebar(); openLayersModal(); };
+        document.getElementById('menuAddPoint').onclick = () => { deactivateAllContexts(); closeSidebar(); openCaptureMethodChooser('Point'); };
+        document.getElementById('menuAddPolygon').onclick = () => { deactivateAllContexts(); closeSidebar(); openCaptureMethodChooser('Polygon'); };
         document.getElementById('menuDownloadMaps').onclick = () => { deactivateAllContexts(); closeSidebar(); openCacheModal(); };
         document.getElementById('menuExportGeoJSON').onclick = () => { deactivateAllContexts(); closeSidebar(); exportGeoJSON(); };
         document.getElementById('menuExportCSV').onclick = () => { deactivateAllContexts(); closeSidebar(); exportCSV(); };
@@ -7007,11 +7014,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && pickerActive) closeLocationPicker(); });
 
         // Add/select feature flows - always open properties sheet first
-        document.getElementById('menuAddPointCurrent').onclick = () => { deactivateAllContexts(); closeSidebar(); pendingCaptureMode = 'current'; showForm('Point'); };
-        document.getElementById('menuAddPolygonCurrent').onclick = () => { deactivateAllContexts(); closeSidebar(); pendingCaptureMode = 'current'; showForm('Polygon'); };
-        document.getElementById('menuAddPointSelect').onclick = () => { deactivateAllContexts(); closeSidebar(); pendingCaptureMode = 'select'; showForm('Point'); };
-        document.getElementById('menuAddPolygonSelect').onclick = () => { deactivateAllContexts(); closeSidebar(); pendingCaptureMode = 'select'; showForm('Polygon'); };
-
         // Simple select on map implementations
         let selectPointHandler = null;
         function enableSelectPointOnMap() {
@@ -7062,3 +7064,4 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     </script>
 </body>
 </html>
+                                                 
