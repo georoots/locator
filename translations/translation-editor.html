@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Translation Editor</title>
+    <style>
+        :root {
+            --bg: #f4f6f8;
+            --card: #ffffff;
+            --border: #d8dee4;
+            --text: #1f2933;
+            --muted: #6b7785;
+            --accent: #2f5f8f;
+            --accent-hover: #244a70;
+            --warn: #b45309;
+            --error: #b42318;
+            --missing: #fff7ed;
+            --ready: #ecfdf3;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.45;
+        }
+
+        header {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            padding: 0.7rem 1.15rem 0.75rem;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .header-top {
+            margin-bottom: 0.6rem;
+        }
+
+        h1 {
+            margin: 0 0 0.15rem;
+            font-size: 1.15rem;
+            font-weight: 600;
+        }
+
+        .subtitle {
+            margin: 0;
+            color: var(--muted);
+            font-size: 0.84rem;
+            line-height: 1.35;
+        }
+
+        .load-panels {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.65rem;
+        }
+
+        .load-panel {
+            border: 1px dashed var(--border);
+            border-radius: 8px;
+            padding: 0.65rem 0.75rem;
+            background: #fafbfc;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .load-panel.ready {
+            border-style: solid;
+            border-color: #86c5a5;
+            background: var(--ready);
+        }
+
+        .load-panel.waiting {
+            opacity: 0.82;
+        }
+
+        .load-panel-head {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.55rem;
+        }
+
+        .step-badge {
+            flex: 0 0 auto;
+            width: 1.45rem;
+            height: 1.45rem;
+            border-radius: 50%;
+            background: var(--accent);
+            color: #fff;
+            font-size: 0.78rem;
+            font-weight: 700;
+            line-height: 1.45rem;
+            text-align: center;
+        }
+
+        .load-panel.ready .step-badge {
+            background: #15803d;
+        }
+
+        .load-title {
+            margin: 0;
+            font-size: 0.92rem;
+            font-weight: 600;
+            line-height: 1.2;
+        }
+
+        .load-hint {
+            margin: 0.1rem 0 0;
+            color: var(--muted);
+            font-size: 0.8rem;
+            line-height: 1.3;
+        }
+
+        .load-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+            align-items: center;
+            padding-left: 2rem;
+        }
+
+        .file-name {
+            padding-left: 2rem;
+            font-size: 0.8rem;
+            color: var(--muted);
+            word-break: break-all;
+            line-height: 1.3;
+        }
+
+        .file-name.loaded {
+            color: var(--text);
+            font-weight: 500;
+        }
+
+        button, .file-btn {
+            border: none;
+            border-radius: 6px;
+            padding: 0.45rem 0.85rem;
+            font-size: 0.86rem;
+            font-weight: 500;
+            cursor: pointer;
+            background: var(--accent);
+            color: #fff;
+            line-height: 1.25;
+            white-space: nowrap;
+        }
+
+        button.secondary, .file-btn.secondary {
+            background: #e8edf2;
+            color: var(--text);
+        }
+
+        button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        button:not(:disabled):hover, .file-btn:hover {
+            background: var(--accent-hover);
+            color: #fff;
+        }
+
+        button:focus-visible, .file-btn:focus-within {
+            outline: 2px solid rgba(47, 95, 143, 0.45);
+            outline-offset: 2px;
+        }
+
+        button.secondary:not(:disabled):hover, .file-btn.secondary:hover {
+            background: #dde4ea;
+            color: var(--text);
+        }
+
+        .toolbar {
+            display: none;
+            flex-wrap: wrap;
+            gap: 0.5rem 0.65rem;
+            align-items: center;
+            margin-top: 0.65rem;
+            padding-top: 0.65rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .toolbar.visible {
+            display: flex;
+        }
+
+        .toolbar input[type="search"] {
+            flex: 1 1 220px;
+            min-width: 180px;
+            padding: 0.45rem 0.65rem;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.86rem;
+        }
+
+        .toolbar label {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            color: var(--muted);
+            font-size: 0.84rem;
+            white-space: nowrap;
+        }
+
+        .stats {
+            margin-left: auto;
+            font-size: 0.8rem;
+            color: var(--muted);
+            line-height: 1.3;
+            text-align: right;
+        }
+
+        .status {
+            margin-top: 0.35rem;
+            font-size: 0.82rem;
+            color: var(--muted);
+            min-height: 0;
+        }
+
+        .status:empty {
+            display: none;
+        }
+
+        .status.ok { color: #166534; }
+        .status.warn { color: var(--warn); }
+        .status.error { color: var(--error); }
+
+        main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem 1.25rem 2rem;
+        }
+
+        .empty-state {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 2rem 1.25rem;
+            color: var(--muted);
+            text-align: center;
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.9rem 1rem;
+            margin-bottom: 0.75rem;
+            scroll-margin-top: 11rem;
+        }
+
+        .row.issue {
+            background: var(--missing);
+            border-color: #f5d0a0;
+        }
+
+        .row.source-missing {
+            background: #f3f4ff;
+            border-color: #b8c2ff;
+        }
+
+        .row.highlight-issue {
+            border-color: var(--error);
+            box-shadow: 0 0 0 2px rgba(180, 35, 24, 0.35);
+            animation: highlight-issue 2s ease-out;
+        }
+
+        @keyframes highlight-issue {
+            0%, 40% {
+                box-shadow: 0 0 0 3px rgba(180, 35, 24, 0.45);
+            }
+            100% {
+                box-shadow: 0 0 0 2px rgba(180, 35, 24, 0.15);
+            }
+        }
+
+        .key {
+            grid-column: 1 / -1;
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 0.78rem;
+            color: var(--muted);
+            margin-bottom: 0.15rem;
+            word-break: break-all;
+        }
+
+        .col-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--muted);
+            margin-bottom: 0.25rem;
+        }
+
+        .source-text {
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .placeholder-note {
+            margin-top: 0.35rem;
+            font-size: 0.75rem;
+            color: var(--muted);
+            font-family: Consolas, "Courier New", monospace;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 3.2rem;
+            resize: vertical;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.55rem 0.65rem;
+            font: inherit;
+            line-height: 1.4;
+        }
+
+        textarea:focus {
+            outline: 2px solid rgba(47, 95, 143, 0.25);
+            border-color: var(--accent);
+        }
+
+        @media (max-width: 800px) {
+            .load-panels,
+            .row {
+                grid-template-columns: 1fr;
+            }
+
+            .stats {
+                margin-left: 0;
+                flex: 1 1 100%;
+                text-align: left;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-top">
+            <h1>Translation Editor</h1>
+            <p class="subtitle">Load the source language file, then open or create a target translation.</p>
+        </div>
+
+        <div class="load-panels">
+            <section class="load-panel" id="sourcePanel">
+                <div class="load-panel-head">
+                    <span class="step-badge" aria-hidden="true">1</span>
+                    <div>
+                        <h2 class="load-title">Original</h2>
+                        <p class="load-hint">Source language JSON (e.g. i18n-en.json)</p>
+                    </div>
+                </div>
+                <div class="load-actions">
+                    <label class="file-btn">
+                        Choose source file
+                        <input type="file" id="loadSource" accept=".json,application/json" hidden>
+                    </label>
+                </div>
+                <div class="file-name" id="sourceFileName">No file loaded yet</div>
+            </section>
+
+            <section class="load-panel" id="targetPanel">
+                <div class="load-panel-head">
+                    <span class="step-badge" aria-hidden="true">2</span>
+                    <div>
+                        <h2 class="load-title">Target</h2>
+                        <p class="load-hint">Open an existing translation or start with blank strings</p>
+                    </div>
+                </div>
+                <div class="load-actions">
+                    <label class="file-btn secondary">
+                        Open translation file
+                        <input type="file" id="loadTarget" accept=".json,application/json" hidden>
+                    </label>
+                    <button type="button" class="secondary" id="startEmptyBtn" disabled>Start empty translation</button>
+                </div>
+                <div class="file-name" id="targetFileName">Load the original first</div>
+            </section>
+        </div>
+
+        <div class="toolbar" id="toolbar">
+            <input type="search" id="search" placeholder="Filter by key or source text…" autocomplete="off">
+            <label><input type="checkbox" id="showIssuesOnly"> Show issues only</label>
+            <button type="button" id="exportBtn">Export JSON</button>
+            <span class="stats" id="stats"></span>
+        </div>
+
+        <div class="status" id="status"></div>
+    </header>
+
+    <main>
+        <div class="empty-state" id="emptyState">
+            Load the original array to begin. Then load a target array or start an empty translation.
+        </div>
+        <div id="rows" hidden></div>
+    </main>
+
+    <script>
+        const state = {
+            source: null,
+            sourceFileName: null,
+            target: {},
+            targetFileName: null,
+            targetStartedEmpty: false,
+            targetLabel: 'Target',
+            keyOrder: []
+        };
+
+        const sourcePanel = document.getElementById('sourcePanel');
+        const targetPanel = document.getElementById('targetPanel');
+        const sourceFileNameEl = document.getElementById('sourceFileName');
+        const targetFileNameEl = document.getElementById('targetFileName');
+        const startEmptyBtn = document.getElementById('startEmptyBtn');
+        const toolbar = document.getElementById('toolbar');
+        const emptyState = document.getElementById('emptyState');
+        const rowsEl = document.getElementById('rows');
+        const searchEl = document.getElementById('search');
+        const showIssuesOnlyEl = document.getElementById('showIssuesOnly');
+        const statsEl = document.getElementById('stats');
+        const statusEl = document.getElementById('status');
+
+        function setStatus(message, type = '') {
+            statusEl.textContent = message;
+            statusEl.className = `status${type ? ' ' + type : ''}`;
+        }
+
+        function parseTranslationFile(text, label) {
+            const parsed = JSON.parse(text);
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                throw new Error(`${label} file must be a JSON object of key/value pairs.`);
+            }
+            for (const [key, value] of Object.entries(parsed)) {
+                if (typeof value !== 'string') {
+                    throw new Error(`Key "${key}" must have a string value.`);
+                }
+            }
+            return parsed;
+        }
+
+        function readJsonFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(new Error('Could not read file.'));
+                reader.readAsText(file, 'utf-8');
+            });
+        }
+
+        function deriveTargetLabel(fileName) {
+            if (!fileName) return 'Target';
+            const base = fileName.replace(/\.json$/i, '');
+            const parts = base.split(/[-_]/);
+            const code = parts[parts.length - 1];
+            return code ? code.toUpperCase() : 'Target';
+        }
+
+        function rebuildKeyOrder() {
+            state.keyOrder = Object.keys(state.source || {});
+        }
+
+        function initializeEmptyTarget() {
+            state.target = {};
+            for (const key of state.keyOrder) {
+                state.target[key] = '';
+            }
+            state.targetFileName = null;
+            state.targetStartedEmpty = true;
+            state.targetLabel = 'Target';
+        }
+
+        function mergeTargetFromFile(data) {
+            state.target = {};
+            for (const key of state.keyOrder) {
+                state.target[key] = Object.prototype.hasOwnProperty.call(data, key) ? data[key] : '';
+            }
+            for (const key of Object.keys(data)) {
+                if (!state.keyOrder.includes(key)) {
+                    state.keyOrder.push(key);
+                    state.target[key] = data[key];
+                }
+            }
+        }
+
+        function hasSourceKey(key) {
+            return !!state.source && Object.prototype.hasOwnProperty.call(state.source, key);
+        }
+
+        function getRowIssues(key, sourceValue, targetValue) {
+            const issues = [];
+            if (!hasSourceKey(key)) {
+                issues.push('source-missing');
+            }
+            if (hasSourceKey(key) && !String(targetValue).trim()) {
+                issues.push('target-missing');
+            }
+            if (hasSourceKey(key) && String(targetValue).trim() && !placeholdersMatch(sourceValue, targetValue)) {
+                issues.push('placeholder-mismatch');
+            }
+            return issues;
+        }
+
+        function issueLabel(issues) {
+            return issues.map((issue) => {
+                if (issue === 'source-missing') return 'Missing in source';
+                if (issue === 'target-missing') return 'Missing translation';
+                if (issue === 'placeholder-mismatch') return 'Placeholder mismatch';
+                return issue;
+            }).join(' · ');
+        }
+
+        function setFileNameDisplay(el, text, loaded) {
+            el.textContent = text;
+            el.classList.toggle('loaded', loaded);
+        }
+
+        function updatePanels() {
+            sourcePanel.classList.toggle('ready', !!state.source);
+            targetPanel.classList.toggle('ready', isEditorReady());
+            targetPanel.classList.toggle('waiting', !state.source);
+            startEmptyBtn.disabled = !state.source;
+
+            if (state.sourceFileName) {
+                setFileNameDisplay(sourceFileNameEl, state.sourceFileName, true);
+            } else {
+                setFileNameDisplay(sourceFileNameEl, 'No file loaded yet', false);
+            }
+
+            if (!state.source) {
+                setFileNameDisplay(targetFileNameEl, 'Load the original first', false);
+            } else if (state.targetStartedEmpty) {
+                setFileNameDisplay(targetFileNameEl, 'Empty translation started', true);
+            } else if (state.targetFileName) {
+                setFileNameDisplay(targetFileNameEl, state.targetFileName, true);
+            } else {
+                setFileNameDisplay(targetFileNameEl, 'No target loaded yet', false);
+            }
+        }
+
+        function isEditorReady() {
+            return !!state.source && (state.targetStartedEmpty || !!state.targetFileName);
+        }
+
+        function updateEditorVisibility() {
+            const ready = isEditorReady();
+            toolbar.classList.toggle('visible', ready);
+            emptyState.hidden = ready;
+            rowsEl.hidden = !ready;
+            if (ready) {
+                renderRows();
+            } else {
+                rowsEl.innerHTML = '';
+                statsEl.textContent = '';
+            }
+        }
+
+        function extractPlaceholders(value) {
+            const matches = String(value).match(/\{[^}]+\}/g);
+            return matches ? matches.slice().sort() : [];
+        }
+
+        function placeholdersMatch(sourceValue, targetValue) {
+            if (!String(sourceValue).trim()) return true;
+            const source = extractPlaceholders(sourceValue);
+            const target = extractPlaceholders(targetValue);
+            if (source.length !== target.length) return false;
+            for (let i = 0; i < source.length; i++) {
+                if (source[i] !== target[i]) return false;
+            }
+            return true;
+        }
+
+        function collectTargetTranslations() {
+            const result = {};
+            for (const key of state.keyOrder) {
+                const input = rowsEl.querySelector(`textarea[data-key-input="${CSS.escape(key)}"]`);
+                result[key] = input ? input.value : (state.target[key] ?? '');
+            }
+            return result;
+        }
+
+        function renderRows() {
+            if (!isEditorReady()) return;
+
+            const query = searchEl.value.trim().toLowerCase();
+            const issuesOnly = showIssuesOnlyEl.checked;
+            rowsEl.innerHTML = '';
+
+            for (const key of state.keyOrder) {
+                const sourceValue = hasSourceKey(key) ? state.source[key] : '';
+                const targetValue = state.target[key] ?? '';
+                const issues = getRowIssues(key, sourceValue, targetValue);
+
+                if (issuesOnly && issues.length === 0) continue;
+                if (query) {
+                    const haystack = `${key} ${sourceValue} ${targetValue}`.toLowerCase();
+                    if (!haystack.includes(query)) continue;
+                }
+
+                const row = document.createElement('article');
+                row.className = 'row';
+                row.dataset.rowKey = key;
+                if (issues.includes('source-missing')) row.classList.add('source-missing');
+                if (issues.includes('target-missing') || issues.includes('placeholder-mismatch')) row.classList.add('issue');
+
+                const keyEl = document.createElement('div');
+                keyEl.className = 'key';
+                keyEl.textContent = issues.length ? `${key} · ${issueLabel(issues)}` : key;
+
+                const sourceCol = document.createElement('div');
+                const sourceLabel = document.createElement('div');
+                sourceLabel.className = 'col-label';
+                sourceLabel.textContent = 'Source';
+                const sourceText = document.createElement('div');
+                sourceText.className = 'source-text';
+                sourceText.textContent = sourceValue || '—';
+                const sourcePlaceholders = extractPlaceholders(sourceValue);
+                sourceCol.append(sourceLabel, sourceText);
+                if (sourcePlaceholders.length) {
+                    const note = document.createElement('div');
+                    note.className = 'placeholder-note';
+                    note.textContent = `Placeholders: ${sourcePlaceholders.join(', ')}`;
+                    sourceCol.appendChild(note);
+                }
+
+                const targetCol = document.createElement('div');
+                const targetLabel = document.createElement('div');
+                targetLabel.className = 'col-label';
+                targetLabel.textContent = state.targetLabel;
+                const textarea = document.createElement('textarea');
+                textarea.dataset.keyInput = key;
+                textarea.value = targetValue;
+                targetCol.append(targetLabel, textarea);
+                if (issues.includes('placeholder-mismatch')) {
+                    const note = document.createElement('div');
+                    note.className = 'placeholder-note';
+                    note.textContent = `Expected: ${extractPlaceholders(sourceValue).join(', ') || 'none'} · Got: ${extractPlaceholders(targetValue).join(', ') || 'none'}`;
+                    targetCol.appendChild(note);
+                }
+
+                row.append(keyEl, sourceCol, targetCol);
+                rowsEl.appendChild(row);
+            }
+
+            if (!rowsEl.children.length) {
+                const empty = document.createElement('p');
+                empty.textContent = 'No rows match the current filter.';
+                rowsEl.appendChild(empty);
+            }
+
+            updateStats();
+        }
+
+        function updateStats() {
+            if (!isEditorReady()) {
+                statsEl.textContent = '';
+                return;
+            }
+            const current = collectTargetTranslations();
+            let sourceMissing = 0;
+            let targetMissing = 0;
+            let placeholderIssues = 0;
+            for (const key of state.keyOrder) {
+                const issues = getRowIssues(key, hasSourceKey(key) ? state.source[key] : '', current[key] ?? '');
+                if (issues.includes('source-missing')) sourceMissing++;
+                if (issues.includes('target-missing')) targetMissing++;
+                if (issues.includes('placeholder-mismatch')) placeholderIssues++;
+            }
+            const visible = rowsEl.querySelectorAll('.row').length;
+            statsEl.textContent = `${state.keyOrder.length} keys · ${sourceMissing} missing in source · ${targetMissing} missing translation · ${placeholderIssues} placeholder mismatches · ${visible} shown`;
+        }
+
+        function stripJsonExtension(fileName) {
+            return fileName.replace(/\.json$/i, '');
+        }
+
+        function buildEditedFileName(fileName) {
+            const base = stripJsonExtension(fileName);
+            return `${base}-edited.json`;
+        }
+
+        function sanitizeFileName(name) {
+            return name.trim().replace(/[<>:"/\\|?*]+/g, '-').replace(/\s+/g, '-');
+        }
+
+        function validateBeforeExport(targetData) {
+            const issues = [];
+
+            for (const key of state.keyOrder) {
+                if (!hasSourceKey(key)) continue;
+                const sourceValue = state.source[key] ?? '';
+                const targetValue = targetData[key] ?? '';
+                if (!placeholdersMatch(sourceValue, targetValue)) {
+                    issues.push({
+                        key,
+                        expected: extractPlaceholders(sourceValue),
+                        actual: extractPlaceholders(targetValue)
+                    });
+                }
+            }
+
+            return issues;
+        }
+
+        function findRowForKey(key) {
+            return rowsEl.querySelector(`[data-row-key="${CSS.escape(key)}"]`);
+        }
+
+        function revealAndScrollToKey(key) {
+            let row = findRowForKey(key);
+            if (!row && searchEl.value.trim()) {
+                searchEl.value = '';
+                renderRows();
+                row = findRowForKey(key);
+            }
+            if (!row && showIssuesOnlyEl.checked) {
+                showIssuesOnlyEl.checked = false;
+                renderRows();
+                row = findRowForKey(key);
+            }
+            if (!row) return false;
+
+            row.classList.add('highlight-issue');
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            const textarea = row.querySelector('textarea');
+            if (textarea) {
+                textarea.focus({ preventScroll: true });
+            }
+
+            window.setTimeout(() => row.classList.remove('highlight-issue'), 2200);
+            return true;
+        }
+
+        function exportTranslations() {
+            if (!isEditorReady()) {
+                setStatus('Load the original array and a target translation before exporting.', 'warn');
+                return;
+            }
+
+            const targetData = collectTargetTranslations();
+            const placeholderIssues = validateBeforeExport(targetData);
+            if (placeholderIssues.length) {
+                const firstKey = placeholderIssues[0].key;
+                renderRows();
+                revealAndScrollToKey(firstKey);
+                const preview = placeholderIssues.slice(0, 5).map((issue) => {
+                    return `${issue.key} (expected ${issue.expected.join(', ') || 'none'}; got ${issue.actual.join(', ') || 'none'})`;
+                }).join('; ');
+                setStatus(`Export blocked: placeholder mismatch in ${placeholderIssues.length} key(s). Scrolled to "${firstKey}". ${preview}`, 'error');
+                return;
+            }
+
+            let defaultName = '';
+            if (state.targetFileName) {
+                defaultName = buildEditedFileName(state.targetFileName);
+            }
+
+            const entered = prompt(
+                state.targetFileName
+                    ? 'Enter export file name:'
+                    : 'Enter export file name (required):',
+                defaultName
+            );
+
+            if (entered === null) {
+                setStatus('Export cancelled.', 'warn');
+                return;
+            }
+
+            const cleaned = sanitizeFileName(entered);
+            if (!cleaned) {
+                setStatus('Export cancelled: file name is required.', 'warn');
+                return;
+            }
+
+            const fileName = cleaned.toLowerCase().endsWith('.json') ? cleaned : `${cleaned}.json`;
+            const json = JSON.stringify(targetData, null, 4) + '\n';
+            const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = fileName;
+            link.click();
+            URL.revokeObjectURL(url);
+            setStatus(`Exported ${Object.keys(targetData).length} entries to ${fileName}.`, 'ok');
+        }
+
+        document.getElementById('loadSource').addEventListener('change', async (event) => {
+            const file = event.target.files && event.target.files[0];
+            event.target.value = '';
+            if (!file) return;
+
+            try {
+                const text = await readJsonFile(file);
+                state.source = parseTranslationFile(text, 'Source');
+                state.sourceFileName = file.name;
+                rebuildKeyOrder();
+
+                if (state.targetStartedEmpty) {
+                    initializeEmptyTarget();
+                } else if (state.targetFileName) {
+                    mergeTargetFromFile(state.target);
+                }
+
+                updatePanels();
+                updateEditorVisibility();
+                setStatus(`Loaded source file "${file.name}" with ${state.keyOrder.length} keys.`, 'ok');
+            } catch (err) {
+                state.source = null;
+                state.sourceFileName = null;
+                updatePanels();
+                updateEditorVisibility();
+                setStatus(`Could not load source file: ${err.message}`, 'error');
+            }
+        });
+
+        document.getElementById('loadTarget').addEventListener('change', async (event) => {
+            const file = event.target.files && event.target.files[0];
+            event.target.value = '';
+            if (!file) return;
+
+            if (!state.source) {
+                setStatus('Load the original array first.', 'warn');
+                return;
+            }
+
+            try {
+                const text = await readJsonFile(file);
+                const data = parseTranslationFile(text, 'Target');
+                state.targetFileName = file.name;
+                state.targetStartedEmpty = false;
+                state.targetLabel = deriveTargetLabel(file.name);
+                mergeTargetFromFile(data);
+                updatePanels();
+                updateEditorVisibility();
+                setStatus(`Loaded target file "${file.name}".`, 'ok');
+            } catch (err) {
+                setStatus(`Could not load target file: ${err.message}`, 'error');
+            }
+        });
+
+        startEmptyBtn.addEventListener('click', () => {
+            if (!state.source) {
+                setStatus('Load the original array first.', 'warn');
+                return;
+            }
+            initializeEmptyTarget();
+            updatePanels();
+            updateEditorVisibility();
+            setStatus('Started empty translation. Fill in the target column, then export.', 'ok');
+        });
+
+        rowsEl.addEventListener('input', (event) => {
+            if (!event.target.matches('textarea[data-key-input]')) return;
+            const key = event.target.dataset.keyInput;
+            state.target[key] = event.target.value;
+            const row = event.target.closest('.row');
+            if (row) {
+                const sourceValue = hasSourceKey(key) ? state.source[key] : '';
+                const issues = getRowIssues(key, sourceValue, event.target.value);
+                row.classList.toggle('source-missing', issues.includes('source-missing'));
+                row.classList.toggle('issue', issues.includes('target-missing') || issues.includes('placeholder-mismatch'));
+                const keyEl = row.querySelector('.key');
+                if (keyEl) keyEl.textContent = issues.length ? `${key} · ${issueLabel(issues)}` : key;
+            }
+            updateStats();
+        });
+
+        searchEl.addEventListener('input', renderRows);
+        showIssuesOnlyEl.addEventListener('change', renderRows);
+        document.getElementById('exportBtn').addEventListener('click', exportTranslations);
+
+        updatePanels();
+        updateEditorVisibility();
+    </script>
+</body>
+</html>
