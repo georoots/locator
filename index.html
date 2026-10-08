@@ -5351,12 +5351,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 showToast(t('recording.reviewInsufficient', 'Not enough valid GPS points to build a polygon. Keep walking or switch to manual capture.'));
                 return;
             }
-            hideRecordingReviewToolbar();
             const validation = validateRecordedPolygonRing(cleanup.ring);
             if (!validation.ok || !validation.ring) {
                 showToast(t('recording.reviewInvalidPolygon', 'The cleaned polygon is not valid (self-intersecting or degenerate). Keep recording or start over.'));
                 return;
             }
+            hideRecordingReviewToolbar();
             const normalizedRing = validation.ring;
             currentPolygon = normalizedRing.slice(0, -1);
             clearRecordingPreviewLayers();
@@ -5993,14 +5993,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         document.getElementById('btnRecordingResume').onclick = resumePolygonRecording;
         document.getElementById('btnRecordingFinish').onclick = finishPolygonRecording;
         document.getElementById('btnRecordingCancel').onclick = () => {
-            stopPolygonRecordingSession(false);
+            cancelPolygonRecording();
             showToast(t('recording.toastCancelled', 'Recording cancelled'));
-            if (supplementalCaptureContext) {
-                supplementalCaptureContext = null;
-                document.getElementById('featureForm').classList.remove('hidden');
-            } else {
-                showMainView();
-            }
         };
         document.getElementById('btnCloseRecordingWarning').onclick = () => {
             document.getElementById('recordingWarningModal').classList.add('hidden');
