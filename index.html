@@ -920,6 +920,22 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             box-sizing: border-box;
         }
         .capture-toolbar .btn { flex: 1; font-size: 11px; padding: 8px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .capture-toolbar-auto { flex-direction: column; gap: 8px; }
+        .capture-toolbar-auto .recording-controls { display: flex; gap: 6px; width: 100%; }
+        .capture-toolbar-auto .recording-controls .btn { flex: 1; }
+        .recording-status-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; font-size: 12px; color: var(--gray-dark); }
+        .recording-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: var(--gray-light); font-size: 11px; font-weight: 600; }
+        .recording-badge.active { background: #ffe5e5; color: #c1121f; }
+        .recording-badge.interrupted { background: #fff3cd; color: #856404; }
+        .capture-method-options { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+        .capture-method-option { border: 1px solid var(--border-color); border-radius: 10px; padding: 12px; text-align: left; background: var(--white); cursor: pointer; }
+        .capture-method-option:hover, .capture-method-option:focus { border-color: var(--primary-color); outline: none; box-shadow: 0 0 0 2px rgba(30, 90, 255, 0.15); }
+        .capture-method-option-title { font-weight: 700; margin-bottom: 4px; }
+        .capture-method-option-desc { font-size: 12px; color: var(--gray-dark); line-height: 1.4; }
+        .recording-review-warnings { margin-top: 4px; padding: 8px 10px; border-radius: 8px; background: #fff3cd; color: #664d03; font-size: 12px; line-height: 1.4; width: 100%; box-sizing: border-box; }
+        .recording-review-warnings.hidden { display: none; }
+        #captureToolbarRecordingReview .recording-review-preview { margin-bottom: 0; font-size: 12px; width: 100%; }
+        #captureToolbarRecordingReview .recording-review-title { font-weight: 700; font-size: 13px; color: var(--text-color); }
 
         /* Layers modal */
         .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1100; }
@@ -1486,6 +1502,35 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             <button class="btn btn-primary" id="btnFinishPolygon" data-i18n="feature.finish">Finish</button>
             <button class="btn btn-danger" id="btnCancelCapturePolygon" data-i18n="common.cancel">Cancel</button>
         </div>
+        <div class="capture-toolbar capture-toolbar-auto hidden" id="captureToolbarAutoRecord">
+            <div class="recording-status-row">
+                <span id="recordingStatusText" data-i18n="recording.statusIdle">Ready to record</span>
+                <span class="recording-badge hidden" id="recordingInterruptionBadge" data-i18n="recording.interruption">Tracking interrupted</span>
+            </div>
+            <div class="recording-status-row">
+                <span id="recordingPointCount" data-i18n="recording.points">0 points</span>
+            </div>
+            <div class="recording-controls">
+                <button class="btn btn-primary" id="btnRecordingStart" data-i18n="recording.start">Start</button>
+                <button class="btn btn-light hidden" id="btnRecordingPause" data-i18n="recording.pause">Pause</button>
+                <button class="btn btn-light hidden" id="btnRecordingResume" data-i18n="recording.resume">Resume</button>
+                <button class="btn btn-primary hidden" id="btnRecordingFinish" data-i18n="recording.finish">Finish</button>
+                <button class="btn btn-danger" id="btnRecordingCancel" data-i18n="common.cancel">Cancel</button>
+            </div>
+        </div>
+        <div class="capture-toolbar capture-toolbar-auto hidden" id="captureToolbarRecordingReview" role="region" aria-live="polite">
+            <div class="recording-status-row">
+                <span class="recording-review-title" data-i18n="recording.reviewTitle">Review recorded polygon</span>
+            </div>
+            <div class="recording-review-preview" data-i18n="recording.reviewDescription">The dashed line is your walked path. The filled shape is the cleaned outer boundary that will be saved.</div>
+            <div id="recordingReviewStats" class="recording-review-preview"></div>
+            <div id="recordingReviewWarnings" class="recording-review-warnings hidden"></div>
+            <div class="recording-controls">
+                <button class="btn btn-primary" id="btnRecordingReviewConfirm" data-i18n="recording.reviewConfirm">Save polygon</button>
+                <button class="btn btn-light" id="btnRecordingReviewRetry" data-i18n="recording.reviewRetry">Keep recording</button>
+                <button class="btn btn-danger" id="btnRecordingReviewStartOver" data-i18n="recording.reviewStartOver">Start over</button>
+            </div>
+        </div>
         <!-- Location picker overlay -->
         <div id="locationPickerOverlay" aria-hidden="true">
             <div class="crosshair"></div>
@@ -1608,7 +1653,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 <div style="font-size:14px; color:var(--gray-dark);margin-top: 8px;" data-i18n="about.privacy">All data is stored locally on your device, no information is transmitted to ANY servers.</div>
                 <div style="font-size:14px; color:var(--gray-dark);margin-top: 8px;" data-i18n-html="about.openSource">This app is free and open source, and all code is available on <a href="https://github.com/georoots" target="_blank">GitHub</a>. You are welcome to submit your contributions to the project. Any issues or suggestions, please report them on <a href="https://github.com/georooots/locator/issues" target="_blank">GitHub Issues</a> or via email to <a href="mailto:info@georoots.eu">info@georoots.eu</a>.</div>
                 <div style="font-size:14px; color:var(--gray-dark);margin-top: 8px;" data-i18n-html="about.moreTools">For more free tools, visit <a href="https://georoots.eu/" target="_blank">georoots.eu</a>.</div>
-                <div style="margin-top:8px; font-size:12px; color:var(--gray-medium);"><span data-i18n="about.versionLabel">Version:</span> 2.4.1</div>
+                <div style="margin-top:8px; font-size:12px; color:var(--gray-medium);"><span data-i18n="about.versionLabel">Version:</span> 2.6.3</div>
                 <div style="margin-top:16px;">
                     <button class="btn btn-primary btn-block" id="btnInstallAppManual" style="display:none;" data-i18n="install.title">Install App</button>
                 </div>
@@ -1678,13 +1723,79 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                     <button class="btn btn-secondary" id="btnAddExportProperty" style="margin-top:8px; width:100%;" data-i18n="settings.addProperty">+ Add Property</button>
                 </div>
                 
+                <div class="form-group" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                    <label data-i18n="settings.polygonRecording">Polygon Recording</label>
+                    <div class="form-group" style="margin-top: 10px;">
+                        <label for="settingsMinMovement" data-i18n="settings.minMovement">Minimum movement (m)</label>
+                        <input type="number" id="settingsMinMovement" class="form-control" min="1" max="100" step="0.5" />
+                        <div style="font-size:12px; color:var(--gray-dark); margin-top:4px;" data-i18n="settings.minMovementHelp">Ignore GPS fixes until you move at least this far (1–100 m).</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="settingsRecordingInterval" data-i18n="settings.recordingInterval">Recording interval (s)</label>
+                        <input type="number" id="settingsRecordingInterval" class="form-control" min="1" max="30" step="1" />
+                        <div style="font-size:12px; color:var(--gray-dark); margin-top:4px;" data-i18n="settings.recordingIntervalHelp">Minimum time between accepted GPS points (1–30 s).</div>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label style="display:flex; align-items:center; gap:8px; font-weight: normal;">
+                            <input type="checkbox" id="settingsShowRecordingWarning" />
+                            <span data-i18n="settings.showRecordingWarning">Show automatic recording safety warning</span>
+                        </label>
+                    </div>
+                </div>
+
                 <div style="font-size:12px; color:var(--gray-dark);">
                     <span data-i18n="settings.savedDevice">These settings are saved on this device.</span>
                 </div>
             </div>
         </div>
     </div>
-    
+
+    <!-- Polygon capture method chooser -->
+    <div id="captureMethodModal" class="modal hidden" role="dialog" aria-modal="true">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div data-i18n="capture.methodTitle">How to capture the polygon</div>
+                <button class="btn btn-light btn-small" id="btnCloseCaptureMethod" data-i18n="common.close">Close</button>
+            </div>
+            <div class="modal-body">
+                <div style="font-size:13px; color:var(--gray-dark); margin-bottom: 8px;" data-i18n="capture.methodDescription">Choose manual corner capture or automatic perimeter recording while you walk the boundary.</div>
+                <div class="capture-method-options">
+                    <button type="button" class="capture-method-option" id="btnCaptureMethodManual">
+                        <div class="capture-method-option-title" data-i18n="capture.manualTitle">Manual corners</div>
+                        <div class="capture-method-option-desc" data-i18n="capture.manualDescription">Walk to each corner and tap Add Vertex. Best for small or irregular shapes.</div>
+                    </button>
+                    <button type="button" class="capture-method-option" id="btnCaptureMethodAuto">
+                        <div class="capture-method-option-title" data-i18n="capture.autoTitle">Automatic perimeter</div>
+                        <div class="capture-method-option-desc" data-i18n="capture.autoDescription">Walk the boundary while GPS points are recorded automatically. Review and confirm the cleaned polygon before saving.</div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Automatic recording safety warning -->
+    <div id="recordingWarningModal" class="modal hidden" role="dialog" aria-modal="true">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div data-i18n="recording.warningTitle">Automatic perimeter recording</div>
+                <button class="btn btn-light btn-small" id="btnCloseRecordingWarning" data-i18n="common.close">Close</button>
+            </div>
+            <div class="modal-body">
+                <div data-i18n-html="recording.warningBody" style="font-size:13px; line-height:1.5; margin-bottom:12px;">
+                    GPS drift, signal loss, and screen lock can affect the walked path. The app will clean the track into one outer polygon for review. Always check the result on the map before saving.
+                </div>
+                <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-bottom:12px;">
+                    <input type="checkbox" id="recordingWarningDismiss" />
+                    <span data-i18n="recording.warningDontShow">Do not show again</span>
+                </label>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn btn-primary btn-block" id="btnRecordingWarningContinue" data-i18n="recording.warningContinue">Continue</button>
+                    <button class="btn btn-secondary btn-block" id="btnRecordingWarningCancel" data-i18n="recording.warningCancel">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Export Modal -->
     <div id="exportModal" class="modal hidden" role="dialog" aria-modal="true">
         <div class="modal-card">
@@ -1733,7 +1844,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 <button class="btn btn-light btn-small" id="btnCloseImportChoice" data-i18n="common.close">Close</button>
             </div>
             <div class="modal-body">
-                <div style="margin-bottom:8px;" id="importChoiceMessage">How would you like to import the file?</div>
+                <div style="margin-bottom:8px;" data-i18n="import.chooseMethod">How would you like to import the file?</div>
                 <div style="display:flex; gap:8px;">
                     <button class="btn btn-primary btn-block" id="btnImportAsFeatures" data-i18n="import.asFeatures">Import as Features</button>
                     <button class="btn btn-secondary btn-block" id="btnImportAsOverlay" data-i18n="import.asOverlay">Import as Overlay</button>
@@ -1794,7 +1905,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     </div>
 
     <!-- Overlay loader -->
-    <input type="file" id="fileInput" multiple accept=".geojson,.json,application/geo+json,application/vnd.geo+json,application/*+json,application/json,text/plain,application/octet-stream" class="hidden">
+    <input type="file" id="fileInput" accept=".geojson,.json,application/geo+json,application/vnd.geo+json,application/*+json,application/json,text/plain,application/octet-stream" class="hidden">
 
     <!-- PWA Install Prompt -->
     <div id="installPrompt" class="install-prompt hidden">
@@ -1903,10 +2014,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             shadowSize: [41, 41]
         });
     </script>
+    <script src="./polygon-geometry.js"></script>
     <script src="./translations-es.js"></script>
     <script src="./translations-pt.js"></script>
     <script src="./translations-sw.js"></script>
-    <script src="./translations-cs.js"></script>
     <script>
         /*
          * JAVASCRIPT VIEWPORT HEIGHT MANAGEMENT
@@ -1948,6 +2059,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         let pendingType = null; // 'Point' | 'Polygon'
         let pendingProps = null; // properties from form
         let pendingCaptureMode = null; // 'current' | 'select'
+        let pendingPolygonCaptureMethod = 'manual'; // 'manual' | 'auto'
+        let polygonRecordingSession = null;
+        let captureMethodContext = null; // 'primary' | 'supplemental'
+        let recordingTrackLayer = null;
+        let recordingPreviewLayers = { raw: null, cleaned: null };
         let currentPolygon = []; // [[lng,lat],...]
         let lastPopupIndexToOpen = null; // index of feature whose popup should auto-open
         let map = null;
@@ -2101,7 +2217,24 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         let downloadQueue = [];
         let isDownloading = false;
         let downloadStats = { total: 0, completed: 0, failed: 0 };
-        let wakeLock = null; // Screen Wake Lock during downloads
+        let wakeLock = null; // Screen Wake Lock during downloads/recording
+        let wakeLockOwner = null; // 'download' | 'recording'
+
+        const POLYGON_RECORDING_DEFAULTS = {
+            minDistanceM: 1,
+            intervalMs: 2000,
+            warningDismissed: false
+        };
+
+        function clampPolygonRecordingSettings(raw = {}) {
+            const minDistanceM = Math.min(100, Math.max(1, Math.round((Number(raw.minDistanceM) || POLYGON_RECORDING_DEFAULTS.minDistanceM) * 2) / 2));
+            const intervalSec = Math.min(30, Math.max(1, Math.round((Number(raw.intervalMs) || POLYGON_RECORDING_DEFAULTS.intervalMs) / 1000)));
+            return {
+                minDistanceM,
+                intervalMs: intervalSec * 1000,
+                warningDismissed: !!raw.warningDismissed
+            };
+        }
 
         // Persistence consent
         const PERSIST_KEY = 'geolocator.persistConsent';
@@ -2118,13 +2251,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             try {
                 const raw = localStorage.getItem(SETTINGS_KEY);
                 const parsed = raw ? JSON.parse(raw) : {};
+                const polygonRecording = clampPolygonRecordingSettings(parsed.polygonRecording || {});
                 return {
                     language: parsed.language || 'en',
                     additionalFields: parsed.additionalFields || 'none',
-                    exportProperties: Array.isArray(parsed.exportProperties) ? parsed.exportProperties : []
+                    exportProperties: Array.isArray(parsed.exportProperties) ? parsed.exportProperties : [],
+                    polygonRecording
                 };
             } catch (_) {
-                return { language: 'en', additionalFields: 'none', exportProperties: [] };
+                return { language: 'en', additionalFields: 'none', exportProperties: [], polygonRecording: clampPolygonRecordingSettings({}) };
             }
         }
         function saveSettings(settings) {
@@ -2132,7 +2267,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 const safe = {
                     language: settings && typeof settings.language === 'string' ? settings.language : 'en',
                     additionalFields: settings && typeof settings.additionalFields === 'string' ? settings.additionalFields : 'none',
-                    exportProperties: Array.isArray(settings.exportProperties) ? settings.exportProperties : []
+                    exportProperties: Array.isArray(settings.exportProperties) ? settings.exportProperties : [],
+                    polygonRecording: clampPolygonRecordingSettings(settings?.polygonRecording || {})
                 };
                 localStorage.setItem(SETTINGS_KEY, JSON.stringify(safe));
             } catch (_) {}
@@ -2323,7 +2459,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 'export.csvTitle': 'Export CSV',
                 'import.geojsonTitle': 'Import GeoJSON',
                 'import.chooseMethod': 'How would you like to import the file?',
-                'import.chooseMethodMultiple': 'How would you like to import {count} files?',
                 'import.asFeatures': 'Import as Features',
                 'import.asOverlay': 'Import as Overlay',
                 'about.title': 'About',
@@ -2384,8 +2519,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 'import.importedFeatures': 'Imported {count} feature(s)',
                 'import.noValidFeatures': 'No valid features to import',
                 'import.parseFailed': 'Failed to parse GeoJSON',
-                'import.skippedFiles': 'Skipped {count} file(s) without valid GeoJSON: {names}',
-                'import.nothingReceived': 'No file was received',
                 'export.noFeatures': 'No features to export',
                 'export.geojsonComplete': 'GeoJSON exported',
                 'export.csvComplete': 'CSV exported',
@@ -2393,13 +2526,55 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 'export.shareTitle': 'GeoRoots Export',
                 'export.shareText': 'GeoJSON export',
                 'overlay.loaded': 'Overlay loaded: {name}',
-                'overlay.loadedMultiple': '{count} overlays loaded',
                 'map.notInitialized': 'Map not initialized',
                 'map.currentLocation': 'Your current location',
                 'capture.walkCorners': 'Walk to each corner and tap Add Vertex',
                 'capture.drawEdit': 'Move map and edit vertices, then tap Finish',
                 'capture.drawNew': 'Move map, add vertices, then tap Finish',
                 'capture.editShape': 'Edit polygon shape, then tap Finish',
+                'capture.methodTitle': 'How to capture the polygon',
+                'capture.methodDescription': 'Choose manual corner capture or automatic perimeter recording while you walk the boundary.',
+                'capture.manualTitle': 'Manual corners',
+                'capture.manualDescription': 'Walk to each corner and tap Add Vertex. Best for small or irregular shapes.',
+                'capture.autoTitle': 'Automatic perimeter',
+                'capture.autoDescription': 'Walk the boundary while GPS points are recorded automatically. Review and confirm the cleaned polygon before saving.',
+                'recording.start': 'Start',
+                'recording.pause': 'Pause',
+                'recording.resume': 'Resume',
+                'recording.finish': 'Finish',
+                'recording.statusIdle': 'Ready to record',
+                'recording.statusRecording': 'Recording perimeter',
+                'recording.statusPaused': 'Recording paused',
+                'recording.points': '{count} points',
+                'recording.interruption': 'Tracking interrupted',
+                'recording.warningTitle': 'Automatic perimeter recording',
+                'recording.warningBody': 'GPS drift, signal loss, and screen lock can affect the walked path. The app will clean the track into one outer polygon for review. Always check the result on the map before saving.',
+                'recording.warningDontShow': 'Do not show again',
+                'recording.warningContinue': 'Continue',
+                'recording.warningCancel': 'Cancel',
+                'recording.reviewTitle': 'Review recorded polygon',
+                'recording.reviewDescription': 'The dashed line is your walked path. The filled shape is the cleaned outer boundary that will be saved.',
+                'recording.reviewStats': '{rawCount} walked points → {vertexCount} polygon vertices • {area}',
+                'recording.reviewInterruption': 'Tracking was interrupted during this session. Check the boundary carefully before saving.',
+                'recording.reviewConvexFallback': 'The walked path could not be cleaned safely, so a convex hull was used as a fallback boundary.',
+                'recording.reviewConfirm': 'Save polygon',
+                'recording.reviewRetry': 'Keep recording',
+                'recording.reviewStartOver': 'Start over',
+                'recording.toastStartOver': 'Recording reset',
+                'recording.reviewInsufficient': 'Not enough valid GPS points to build a polygon. Keep walking or switch to manual capture.',
+                'recording.reviewInvalidPolygon': 'The cleaned polygon is not valid (self-intersecting or degenerate). Keep recording or start over.',
+                'recording.toastStarted': 'Recording started',
+                'recording.toastPaused': 'Recording paused',
+                'recording.toastResumed': 'Recording resumed',
+                'recording.toastCancelled': 'Recording cancelled',
+                'recording.toastInterruption': 'GPS tracking was interrupted. Path reconnected.',
+                'recording.toastNeedPoints': 'Record at least 3 points before finishing',
+                'settings.polygonRecording': 'Polygon Recording',
+                'settings.minMovement': 'Minimum movement (m)',
+                'settings.minMovementHelp': 'Ignore GPS fixes until you move at least this far (1–100 m).',
+                'settings.recordingInterval': 'Recording interval (s)',
+                'settings.recordingIntervalHelp': 'Minimum time between accepted GPS points (1–30 s).',
+                'settings.showRecordingWarning': 'Show automatic recording safety warning',
                 'toast.needVertices': 'Need at least 3 vertices',
                 'toast.noGps': 'No GPS fix yet',
                 'toast.pointSaved': 'Point saved',
@@ -2827,7 +3002,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             isDownloading = false;
             document.getElementById('activeDownloads').classList.add('hidden');
             hideFloatingProgress();
-            releaseWakeLock();
+            releaseWakeLock('download');
             showToast(t('cache.cachedTiles', `Cached ${downloadStats.completed} tiles for ${areaName}`, {
                 count: downloadStats.completed,
                 area: areaName
@@ -2945,7 +3120,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             // Hide progress indicators
             document.getElementById('activeDownloads').classList.add('hidden');
             hideFloatingProgress();
-            releaseWakeLock();
+            releaseWakeLock('download');
             
             showToast(t('cache.downloadCancelled', 'Download cancelled'));
         }
@@ -3247,71 +3422,32 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             saveFeaturesIfAllowed();
         }
 
-        // Detect GeoJSON by content, not by MIME type or extension: Android share sources
-        // (e.g. WhatsApp) often deliver .geojson files as application/octet-stream or text/plain.
-        async function readGeoJSONFile(file) {
-            try {
-                // Cheap sniff first so large non-JSON files (photos, videos) are never fully decoded
-                const head = (await file.slice(0, 256).text()).replace(/^\uFEFF/, '').trimStart();
-                if (!head.startsWith('{')) return null;
-                const gj = JSON.parse((await file.text()).replace(/^\uFEFF/, ''));
-                return gj && typeof gj.type === 'string' ? gj : null;
-            } catch (_) {
-                return null;
-            }
-        }
-
-        function importDisplayName(file, index) {
-            return (file.name || '').replace(/\.bin$/i, '').trim() || `shared_${index + 1}.geojson`;
-        }
-
-        function addFeaturesFromGeoJSON(gj) {
-            const fc = normalizeToFeatureCollection(gj);
-            if (!fc || !Array.isArray(fc.features)) return 0;
-            const valid = fc.features.map(normalizeFeatureGeometry).filter(Boolean);
-            valid.forEach(f => features.push(f));
-            return valid.length;
-        }
-
-        // Import files as working features or as custom overlays ('features' | 'overlay')
-        async function importGeoJSONFiles(files, mode) {
-            if (!files.length) return;
-            initializeMapIfNeeded();
-            let featureCount = 0;
-            const overlayNames = [];
-            const skipped = [];
-            for (const [index, file] of files.entries()) {
-                const name = importDisplayName(file, index);
-                const gj = await readGeoJSONFile(file);
-                if (!gj) {
-                    skipped.push(name);
-                } else if (mode === 'features') {
-                    const count = addFeaturesFromGeoJSON(gj);
-                    if (count) featureCount += count; else skipped.push(name);
-                } else if (addCustomOverlay(gj, name)) {
-                    overlayNames.push(name);
-                } else {
-                    skipped.push(name);
+        // Import GeoJSON into working features
+        function importGeoJSONAsFeatures(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    const fc = normalizeToFeatureCollection(data);
+                    if (!fc || !Array.isArray(fc.features)) { showToast(t('import.invalidGeojson', 'Invalid GeoJSON')); return; }
+                    let imported = 0;
+                    fc.features.forEach(f => {
+                        const norm = normalizeFeatureGeometry(f);
+                        if (norm) { features.push(norm); imported++; }
+                    });
+                    if (imported > 0) {
+                        ensurePersistConsentThenSave();
+                        renderFeatureList();
+                        if (map) drawFeaturesOnMap();
+                        showToast(t('import.importedFeatures', `Imported ${imported} feature(s)`, { count: imported }));
+                    } else {
+                        showToast(t('import.noValidFeatures', 'No valid features to import'));
+                    }
+                } catch (err) {
+                    showToast(t('import.parseFailed', 'Failed to parse GeoJSON'));
                 }
-            }
-
-            if (featureCount) {
-                ensurePersistConsentThenSave();
-                renderFeatureList();
-            }
-            if (overlayNames.length) {
-                saveCustomOverlays();
-                ensureOverlaysOnTop();
-                renderCustomOverlayOptions();
-                if (!document.getElementById('layersModal').classList.contains('hidden')) renderLayerOptions();
-            }
-
-            const messages = [];
-            if (featureCount) messages.push(t('import.importedFeatures', `Imported ${featureCount} feature(s)`, { count: featureCount }));
-            if (overlayNames.length === 1) messages.push(t('overlay.loaded', `Overlay loaded: ${overlayNames[0]}`, { name: overlayNames[0] }));
-            if (overlayNames.length > 1) messages.push(t('overlay.loadedMultiple', `${overlayNames.length} overlays loaded`, { count: overlayNames.length }));
-            if (skipped.length) messages.push(t('import.skippedFiles', `Skipped ${skipped.length} file(s) without valid GeoJSON: ${skipped.join(', ')}`, { count: skipped.length, names: skipped.join(', ') }));
-            showToast(messages.join(' • '));
+            };
+            reader.readAsText(file);
         }
 
         function normalizeToFeatureCollection(gj) {
@@ -3888,20 +4024,31 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             });
         }
 
-        async function requestWakeLock() {
+        async function requestWakeLock(owner = 'download') {
             try {
                 if ('wakeLock' in navigator && navigator.wakeLock) {
+                    if (wakeLock && wakeLockOwner && wakeLockOwner !== owner) return;
                     wakeLock = await navigator.wakeLock.request('screen');
-                    wakeLock.addEventListener('release', () => { console.log('Wake Lock was released'); });
+                    wakeLockOwner = owner;
+                    wakeLock.addEventListener('release', () => {
+                        if (wakeLockOwner === owner) {
+                            wakeLock = null;
+                            wakeLockOwner = null;
+                        }
+                    });
                 }
             } catch (err) {
                 console.warn('Wake Lock not available:', err);
             }
         }
 
-        function releaseWakeLock() {
+        function releaseWakeLock(owner) {
+            if (owner && wakeLockOwner && wakeLockOwner !== owner) return;
             try { if (wakeLock && wakeLock.release) { wakeLock.release(); } } catch(_) {}
-            wakeLock = null;
+            if (!owner || wakeLockOwner === owner) {
+                wakeLock = null;
+                wakeLockOwner = null;
+            }
         }
 
         function startCaching() {
@@ -3934,7 +4081,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             // Cleanup any remaining selection overlay
             cancelCacheAreaSelection();
             
-            requestWakeLock();
+            requestWakeLock('download');
             downloadTilesForArea(bounds, selectedLayers, minZoom, maxZoom, areaName);
         }
 
@@ -3962,9 +4109,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         // Unified: hide all modals and cancel any active interactions/selections
         function deactivateAllContexts() {
             // Hide all modals/sheets that may be visible
-            ['layersModal','overlaysModal','cacheModal','manageFeaturesModal','aboutModal','cacheSelectionModal','featureForm','exportModal','importChoiceModal']
+            ['layersModal','overlaysModal','cacheModal','manageFeaturesModal','aboutModal','cacheSelectionModal','featureForm','exportModal','importChoiceModal','captureMethodModal','recordingWarningModal']
                 .forEach((id) => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
-            if (resolveImportChoice) resolveImportChoice(null);
 
             // Cancel cache-area selection overlay and clear any selected bounds
             if (typeof cancelCacheAreaSelection === 'function') { try { cancelCacheAreaSelection(); } catch (_) {} }
@@ -3980,6 +4126,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             const pg = document.getElementById('captureToolbarPolygon');
             if (pt) pt.classList.add('hidden');
             if (pg) pg.classList.add('hidden');
+            hideAutoRecordingToolbar();
+            hideRecordingReviewToolbar();
+            try { stopPolygonRecordingSession(false); } catch (_) {}
             try { hideAccuracyBubble(); } catch (_) {}
 
             // Reset pending capture-related flags
@@ -4099,27 +4248,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             });
         }
 
-        function createOverlayLayer(gj, color) {
-            return L.geoJSON(gj, {
-                style: { color, weight: 2, opacity: 0.9, fillColor: color, fillOpacity: 0.2 },
-                pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 5, color, fillColor: color, fillOpacity: 0.9, pane: 'markerPane' }),
-                onEachFeature: (feature, layer) => layer.bindPopup(createFeaturePopup(feature))
-            });
-        }
-
-        // Returns false if the GeoJSON cannot be rendered; callers persist and refresh the UI
-        function addCustomOverlay(gj, name) {
-            const color = getNextOverlayColor();
-            let layer;
-            try { layer = createOverlayLayer(gj, color); } catch (_) { return false; }
-            if (layer.getLayers().length === 0) return false;
-            layer.addTo(map);
-            const ov = { name, layer, color, data: gj, isInteractive: true };
-            customOverlays.push(ov);
-            setOverlayInteractivity(ov, true);
-            return true;
-        }
-
         const CUSTOM_OVERLAYS_KEY = 'geolocator.customOverlays';
         function saveCustomOverlays() {
             try {
@@ -4138,7 +4266,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                     try {
                         const gj = item.data; // already parsed GeoJSON
                         const color = item.color || getNextOverlayColor();
-                        const layer = createOverlayLayer(gj, color);
+                        const layer = L.geoJSON(gj, {
+                            style: { color, weight: 2, opacity: 0.9, fillColor: color, fillOpacity: 0.2 },
+                            pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 5, color, fillColor: color, fillOpacity: 0.9, pane: 'markerPane' }),
+                        onEachFeature: (feature, layer) => { const idx = features.indexOf(feature); layer.bindPopup(createFeaturePopup(feature, idx >= 0 ? idx : null)); }
+                        });
                         // Always add to map at startup
                         if (map) layer.addTo(map);
                         const ov = { name: item.name, color, data: gj, layer, isInteractive: item.isInteractive !== false };
@@ -4325,6 +4457,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 lng: currentPosition.lng.toFixed(5)
             }, true, currentPosition.accuracy);
             updateAccuracyBubble(currentPosition.accuracy);
+            maybeAcceptRecordingPoint(pos);
             if (map && !document.getElementById('mainView').classList.contains('hidden')) {
                 updateCurrentLocationOnMap();
                 if (!firstFixCentered) {
@@ -4375,6 +4508,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             const pg = document.getElementById('captureToolbarPolygon');
             if (pt) pt.classList.add('hidden');
             if (pg) pg.classList.add('hidden');
+            hideAutoRecordingToolbar();
+            hideRecordingReviewToolbar();
+            try { stopPolygonRecordingSession(false); } catch (_) {}
             hideAccuracyBubble();
             initializeMapIfNeeded();
             drawFeaturesOnMap();
@@ -4386,6 +4522,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
         function showForm(type) {
             pendingType = type; pendingProps = null; editingIndex = null;
+            pendingPolygonCaptureMethod = 'manual';
             formSupplementalValues = {};
             const localizedType = getFeatureTypeLabel(type);
             document.getElementById('formTitle').textContent = t('feature.newType', `New ${localizedType}`, { type: localizedType });
@@ -4653,8 +4790,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             drawFeaturesOnMap();
             redrawWorkingPolyline();
             if (mode === 'gps') {
-                openSupplementalPolygonGpsCapture();
-                showToast(t('capture.walkCorners', 'Walk to each corner and tap Add Vertex'));
+                openPolygonCaptureMethodChooser('supplemental');
             } else {
                 openPolygonFromMapPicker();
                 showToast(existingRing
@@ -4701,7 +4837,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         function finishSupplementalPolygonCapture(closedRing) {
             const field = supplementalCaptureContext?.field;
             if (!field) return;
-            const polygonFeature = createPolygonFeatureFromRing(closedRing, {
+            const normalizedRing = normalizePolygonRing(closedRing);
+            if (!normalizedRing) {
+                showToast(t('toast.needVertices', 'Need at least 3 vertices'));
+                return;
+            }
+            const polygonFeature = createPolygonFeatureFromRing(normalizedRing, {
                 role: 'supplemental',
                 fieldKey: field.areaKey
             });
@@ -4709,7 +4850,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 showToast(t('toast.needVertices', 'Need at least 3 vertices'));
                 return;
             }
-            const area = parseFloat(polygonAreaHectares(getPolygonRingFromFeature(polygonFeature)).toFixed(2));
+            const area = parseFloat(computePolygonAreaHectaresFromCoordinates(normalizedRing).toFixed(2));
             formSupplementalValues[field.areaKey] = area;
             formSupplementalValues[field.geometryKey] = polygonFeature;
             supplementalCaptureContext = null;
@@ -4755,7 +4896,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 return;
             }
             const old = features[index];
-            const area = parseFloat(polygonAreaHectares(getPolygonRingFromFeature(polygonFeature)).toFixed(2));
+            const area = parseFloat(computePolygonAreaHectaresFromCoordinates(closedRing).toFixed(2));
             features[index] = {
                 ...old,
                 geometry: polygonFeature.geometry,
@@ -4784,6 +4925,407 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             } catch (_) {}
         }
 
+        function getPolygonRecordingConfig() {
+            return clampPolygonRecordingSettings(loadSettings().polygonRecording || {});
+        }
+
+        function hideAutoRecordingToolbar() {
+            const toolbar = document.getElementById('captureToolbarAutoRecord');
+            if (toolbar) toolbar.classList.add('hidden');
+        }
+
+        function hideRecordingReviewToolbar() {
+            const toolbar = document.getElementById('captureToolbarRecordingReview');
+            if (toolbar) toolbar.classList.add('hidden');
+        }
+
+        function showRecordingReviewToolbar() {
+            hideAutoRecordingToolbar();
+            const toolbar = document.getElementById('captureToolbarRecordingReview');
+            if (toolbar) toolbar.classList.remove('hidden');
+        }
+
+        function clearRecordingPreviewLayers() {
+            if (!map) return;
+            if (recordingTrackLayer) {
+                try { map.removeLayer(recordingTrackLayer); } catch (_) {}
+                recordingTrackLayer = null;
+            }
+            ['raw', 'cleaned'].forEach(key => {
+                if (recordingPreviewLayers[key]) {
+                    try { map.removeLayer(recordingPreviewLayers[key]); } catch (_) {}
+                    recordingPreviewLayers[key] = null;
+                }
+            });
+        }
+
+        function redrawRecordingTrack() {
+            if (!map || !polygonRecordingSession) return;
+            clearRecordingPreviewLayers();
+            const track = polygonRecordingSession.rawTrack || [];
+            if (track.length > 0) {
+                recordingTrackLayer = L.polyline(track.map(c => [c[1], c[0]]), {
+                    color: '#1e5aff',
+                    weight: 3,
+                    opacity: 0.9
+                }).addTo(map);
+            }
+        }
+
+        function updateRecordingToolbarUI() {
+            const session = polygonRecordingSession;
+            const statusEl = document.getElementById('recordingStatusText');
+            const countEl = document.getElementById('recordingPointCount');
+            const badge = document.getElementById('recordingInterruptionBadge');
+            const btnStart = document.getElementById('btnRecordingStart');
+            const btnPause = document.getElementById('btnRecordingPause');
+            const btnResume = document.getElementById('btnRecordingResume');
+            const btnFinish = document.getElementById('btnRecordingFinish');
+            if (!session || !statusEl) return;
+
+            const count = session.rawTrack.length;
+            countEl.textContent = t('recording.points', `${count} points`, { count });
+
+            if (session.status === 'recording') {
+                statusEl.textContent = t('recording.statusRecording', 'Recording perimeter');
+            } else if (session.status === 'paused') {
+                statusEl.textContent = t('recording.statusPaused', 'Recording paused');
+            } else {
+                statusEl.textContent = t('recording.statusIdle', 'Ready to record');
+            }
+
+            badge.classList.toggle('hidden', !session.hadInterruption);
+            badge.classList.toggle('interrupted', !!session.hadInterruption);
+
+            btnStart.classList.toggle('hidden', session.status !== 'idle');
+            btnPause.classList.toggle('hidden', session.status !== 'recording');
+            btnResume.classList.toggle('hidden', session.status !== 'paused');
+            btnFinish.classList.toggle('hidden', session.status === 'idle');
+        }
+
+        function createPolygonRecordingSession(context) {
+            const config = getPolygonRecordingConfig();
+            return {
+                context,
+                status: 'idle',
+                config,
+                rawTrack: [],
+                lastAcceptedAt: 0,
+                lastAcceptedCoord: null,
+                lastFixAt: 0,
+                hiddenAt: null,
+                hadInterruption: false,
+                pendingReview: null
+            };
+        }
+
+        function openPolygonCaptureMethodChooser(context) {
+            captureMethodContext = context;
+            document.getElementById('featureForm').classList.add('hidden');
+            document.getElementById('mainView').classList.remove('hidden');
+            initializeMapIfNeeded();
+            updateCurrentLocationOnMap();
+            showAccuracyBubble();
+            document.getElementById('captureToolbarPoint').classList.add('hidden');
+            document.getElementById('captureToolbarPolygon').classList.add('hidden');
+            hideAutoRecordingToolbar();
+            hideRecordingReviewToolbar();
+            document.getElementById('captureMethodModal').classList.remove('hidden');
+        }
+
+        function closePolygonCaptureMethodChooser() {
+            document.getElementById('captureMethodModal').classList.add('hidden');
+            captureMethodContext = null;
+        }
+
+        function beginManualPolygonCaptureFromChooser() {
+            pendingPolygonCaptureMethod = 'manual';
+            closePolygonCaptureMethodChooser();
+            if (captureMethodContext === 'supplemental') {
+                openSupplementalManualGpsCapture();
+            } else {
+                showCapture();
+            }
+        }
+
+        function beginAutomaticPolygonCaptureFromChooser() {
+            pendingPolygonCaptureMethod = 'auto';
+            closePolygonCaptureMethodChooser();
+            const settings = loadSettings();
+            if (!settings.polygonRecording?.warningDismissed) {
+                document.getElementById('recordingWarningDismiss').checked = false;
+                document.getElementById('recordingWarningModal').classList.remove('hidden');
+                return;
+            }
+            openAutomaticPolygonRecording(captureMethodContext);
+        }
+
+        function openAutomaticPolygonRecording(context) {
+            polygonRecordingSession = createPolygonRecordingSession(context || captureMethodContext || 'primary');
+            document.getElementById('featureForm').classList.add('hidden');
+            document.getElementById('mainView').classList.remove('hidden');
+            initializeMapIfNeeded();
+            updateCurrentLocationOnMap();
+            showAccuracyBubble();
+            document.getElementById('captureToolbarPoint').classList.add('hidden');
+            document.getElementById('captureToolbarPolygon').classList.add('hidden');
+            hideRecordingReviewToolbar();
+            document.getElementById('captureToolbarAutoRecord').classList.remove('hidden');
+            clearRecordingPreviewLayers();
+            updateRecordingToolbarUI();
+        }
+
+        function markRecordingInterruption() {
+            if (!polygonRecordingSession || polygonRecordingSession.status !== 'recording') return;
+            if (!polygonRecordingSession.hadInterruption) {
+                polygonRecordingSession.hadInterruption = true;
+                updateRecordingToolbarUI();
+                showToast(t('recording.toastInterruption', 'GPS tracking was interrupted. Path reconnected.'));
+            }
+        }
+
+        function maybeAcceptRecordingPoint(pos) {
+            const session = polygonRecordingSession;
+            if (!session || session.status !== 'recording') return;
+            const now = pos.timestamp || Date.now();
+            const coord = [pos.coords.longitude, pos.coords.latitude];
+            const geom = window.PolygonGeometry;
+            if (!geom?.isFiniteCoord(coord)) return;
+
+            if (session.lastFixAt && now - session.lastFixAt > session.config.intervalMs * 3) {
+                markRecordingInterruption();
+            }
+            session.lastFixAt = now;
+
+            if (session.lastAcceptedAt && now - session.lastAcceptedAt < session.config.intervalMs) return;
+            if (session.lastAcceptedCoord && geom.haversineMeters(session.lastAcceptedCoord, coord) < session.config.minDistanceM) return;
+
+            session.rawTrack.push(coord);
+            session.lastAcceptedAt = now;
+            session.lastAcceptedCoord = coord;
+            redrawRecordingTrack();
+            updateRecordingToolbarUI();
+        }
+
+        function startPolygonRecording() {
+            if (!polygonRecordingSession) return;
+            polygonRecordingSession.status = 'recording';
+            polygonRecordingSession.config = getPolygonRecordingConfig();
+            polygonRecordingSession.lastAcceptedAt = 0;
+            requestWakeLock('recording');
+            updateRecordingToolbarUI();
+            showToast(t('recording.toastStarted', 'Recording started'));
+            if (currentPosition) {
+                maybeAcceptRecordingPoint({
+                    coords: { latitude: currentPosition.lat, longitude: currentPosition.lng, accuracy: currentPosition.accuracy },
+                    timestamp: currentPosition.ts || Date.now()
+                });
+            }
+        }
+
+        function pausePolygonRecording() {
+            if (!polygonRecordingSession || polygonRecordingSession.status !== 'recording') return;
+            polygonRecordingSession.status = 'paused';
+            releaseWakeLock('recording');
+            updateRecordingToolbarUI();
+            showToast(t('recording.toastPaused', 'Recording paused'));
+        }
+
+        function resumePolygonRecording() {
+            if (!polygonRecordingSession || polygonRecordingSession.status !== 'paused') return;
+            polygonRecordingSession.status = 'recording';
+            polygonRecordingSession.lastAcceptedAt = 0;
+            requestWakeLock('recording');
+            updateRecordingToolbarUI();
+            showToast(t('recording.toastResumed', 'Recording resumed'));
+        }
+
+        function cancelPolygonRecording(showMain = true) {
+            releaseWakeLock('recording');
+            polygonRecordingSession = null;
+            clearRecordingPreviewLayers();
+            hideAutoRecordingToolbar();
+            hideRecordingReviewToolbar();
+            if (showMain) {
+                if (supplementalCaptureContext) {
+                    supplementalCaptureContext = null;
+                    currentPolygon = [];
+                    clearWorkingPolyline();
+                    hideAccuracyBubble();
+                    document.getElementById('featureForm').classList.remove('hidden');
+                } else {
+                    showMainView();
+                }
+            }
+        }
+
+        function cleanupRecordedTrack(session) {
+            const geom = window.PolygonGeometry;
+            const config = session.config || getPolygonRecordingConfig();
+            return geom.cleanTrackToPolygon(session.rawTrack, {
+                minDistanceM: config.minDistanceM,
+                simplifyM: Math.max(config.minDistanceM, 2)
+            });
+        }
+
+        function validateRecordedPolygonRing(ring) {
+            const geom = window.PolygonGeometry;
+            if (!geom?.validateSimplePolygonRing) {
+                return { ok: false, ring: null, issues: ['geometry_unavailable'] };
+            }
+            return geom.validateSimplePolygonRing(ring);
+        }
+
+        function renderRecordingReviewPreview(session, cleanup) {
+            clearRecordingPreviewLayers();
+            if (!map) return;
+            const raw = session.rawTrack || [];
+            if (raw.length > 0) {
+                recordingPreviewLayers.raw = L.polyline(raw.map(c => [c[1], c[0]]), {
+                    color: '#6c757d',
+                    weight: 3,
+                    opacity: 0.95,
+                    dashArray: '6,4'
+                }).addTo(map);
+            }
+            if (cleanup.ok && cleanup.ring) {
+                const latLngs = cleanup.ring.map(c => [c[1], c[0]]);
+                recordingPreviewLayers.cleaned = L.polygon(latLngs, {
+                    color: '#1e5aff',
+                    weight: 2,
+                    fillColor: '#1e5aff',
+                    fillOpacity: 0.18
+                }).addTo(map);
+                try {
+                    map.fitBounds(recordingPreviewLayers.cleaned.getBounds(), {
+                        paddingTopLeft: [40, 40],
+                        paddingBottomRight: [40, 220],
+                        maxZoom: 18
+                    });
+                } catch (_) {}
+            }
+        }
+
+        function finishPolygonRecording() {
+            const session = polygonRecordingSession;
+            if (!session) return;
+            if (session.rawTrack.length < 3) {
+                showToast(t('recording.toastNeedPoints', 'Record at least 3 points before finishing'));
+                return;
+            }
+            const cleanup = cleanupRecordedTrack(session);
+            if (!cleanup.ok || !cleanup.ring) {
+                showToast(t('recording.reviewInsufficient', 'Not enough valid GPS points to build a polygon. Keep walking or switch to manual capture.'));
+                return;
+            }
+            const validation = validateRecordedPolygonRing(cleanup.ring);
+            if (!validation.ok || !validation.ring) {
+                showToast(t('recording.reviewInvalidPolygon', 'The cleaned polygon is not valid (self-intersecting or degenerate). Keep recording or start over.'));
+                return;
+            }
+            cleanup.ring = validation.ring;
+            session.pendingReview = cleanup;
+            session.status = 'review';
+            releaseWakeLock('recording');
+            renderRecordingReviewPreview(session, cleanup);
+            updateRecordingToolbarUI();
+
+            const stats = document.getElementById('recordingReviewStats');
+            const warningsEl = document.getElementById('recordingReviewWarnings');
+            const normalizedRing = cleanup.ring;
+            const vertexCount = normalizedRing.length - 1;
+            const reviewArea = formatArea(computePolygonAreaHectaresFromCoordinates(normalizedRing));
+            stats.textContent = t('recording.reviewStats', `${session.rawTrack.length} walked points → ${vertexCount} polygon vertices • ${reviewArea}`, {
+                rawCount: session.rawTrack.length,
+                vertexCount,
+                area: reviewArea
+            });
+
+            const warnings = [];
+            if (session.hadInterruption) warnings.push(t('recording.reviewInterruption', 'Tracking was interrupted during this session. Check the boundary carefully before saving.'));
+            if (cleanup.fallbackUsed) warnings.push(t('recording.reviewConvexFallback', 'The walked path could not be cleaned safely, so a convex hull was used as a fallback boundary.'));
+            if (warnings.length) {
+                warningsEl.innerHTML = warnings.map(w => `<div>${w}</div>`).join('');
+                warningsEl.classList.remove('hidden');
+            } else {
+                warningsEl.innerHTML = '';
+                warningsEl.classList.add('hidden');
+            }
+            showRecordingReviewToolbar();
+        }
+
+        function resumeRecordingAfterReview() {
+            if (!polygonRecordingSession?.pendingReview) return;
+            polygonRecordingSession.pendingReview = null;
+            polygonRecordingSession.status = 'recording';
+            hideRecordingReviewToolbar();
+            document.getElementById('captureToolbarAutoRecord').classList.remove('hidden');
+            clearRecordingPreviewLayers();
+            redrawRecordingTrack();
+            requestWakeLock('recording');
+            updateRecordingToolbarUI();
+        }
+
+        function startOverRecordingAfterReview() {
+            if (!polygonRecordingSession) return;
+            polygonRecordingSession.rawTrack = [];
+            polygonRecordingSession.pendingReview = null;
+            polygonRecordingSession.status = 'idle';
+            polygonRecordingSession.lastAcceptedAt = 0;
+            polygonRecordingSession.lastAcceptedCoord = null;
+            polygonRecordingSession.lastFixAt = 0;
+            polygonRecordingSession.hadInterruption = false;
+            clearRecordingPreviewLayers();
+            hideRecordingReviewToolbar();
+            document.getElementById('captureToolbarAutoRecord').classList.remove('hidden');
+            updateRecordingToolbarUI();
+            showToast(t('recording.toastStartOver', 'Recording reset'));
+        }
+
+        function confirmRecordingReview() {
+            const session = polygonRecordingSession;
+            const cleanup = session?.pendingReview;
+            if (!session || !cleanup?.ok || !cleanup.ring) {
+                showToast(t('recording.reviewInsufficient', 'Not enough valid GPS points to build a polygon. Keep walking or switch to manual capture.'));
+                return;
+            }
+            hideRecordingReviewToolbar();
+            const validation = validateRecordedPolygonRing(cleanup.ring);
+            if (!validation.ok || !validation.ring) {
+                showToast(t('recording.reviewInvalidPolygon', 'The cleaned polygon is not valid (self-intersecting or degenerate). Keep recording or start over.'));
+                return;
+            }
+            const normalizedRing = validation.ring;
+            currentPolygon = normalizedRing.slice(0, -1);
+            clearRecordingPreviewLayers();
+            const context = session.context;
+            polygonRecordingSession = null;
+            hideAutoRecordingToolbar();
+            if (context === 'supplemental') {
+                finishSupplementalPolygonCapture(normalizedRing);
+                hideAccuracyBubble();
+            } else {
+                finishPolygon(normalizedRing);
+            }
+        }
+
+        function stopPolygonRecordingSession(resetUi = true) {
+            releaseWakeLock('recording');
+            polygonRecordingSession = null;
+            clearRecordingPreviewLayers();
+            if (resetUi) {
+                hideAutoRecordingToolbar();
+                hideRecordingReviewToolbar();
+            }
+            document.getElementById('recordingWarningModal').classList.add('hidden');
+            closePolygonCaptureMethodChooser();
+        }
+
+        function openSupplementalManualGpsCapture() {
+            openSupplementalPolygonGpsCapture();
+            showToast(t('capture.walkCorners', 'Walk to each corner and tap Add Vertex'));
+        }
+
         function showCapture() {
             document.getElementById('featureForm').classList.add('hidden');
             document.getElementById('mainView').classList.remove('hidden');
@@ -4800,6 +5342,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             updateCurrentLocationOnMap();
             document.getElementById('captureToolbarPoint').classList.add('hidden');
             document.getElementById('captureToolbarPolygon').classList.add('hidden');
+            hideAutoRecordingToolbar();
+            hideRecordingReviewToolbar();
             if (pendingType === 'Point') {
                 if (pendingCaptureMode === 'select') {
                     openPointFromMapPicker();
@@ -4810,6 +5354,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             } else {
                 if (pendingCaptureMode === 'select') {
                     openPolygonFromMapPicker();
+                } else if (pendingPolygonCaptureMethod === 'auto') {
+                    openAutomaticPolygonRecording('primary');
                 } else {
                     document.getElementById('captureToolbarPolygon').classList.remove('hidden');
                     showAccuracyBubble();
@@ -4967,6 +5513,26 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             return String(value);
         }
 
+        function getOptionalFormAreaHectares() {
+            const raw = document.getElementById('area')?.value;
+            if (raw === undefined || raw === null || String(raw).trim() === '') return null;
+            const parsed = parseFloat(raw);
+            return Number.isFinite(parsed) ? parsed : null;
+        }
+
+        function computePolygonAreaHectaresFromCoordinates(coordinatesLngLat) {
+            const ring = normalizePolygonRing(coordinatesLngLat);
+            if (!ring) return 0;
+            return polygonAreaHectares(ring);
+        }
+
+        function resolveSavedPolygonAreaHectares(closedRing, preferComputed = false) {
+            const computedArea = computePolygonAreaHectaresFromCoordinates(closedRing);
+            if (preferComputed) return parseFloat(computedArea.toFixed(2));
+            const userArea = getOptionalFormAreaHectares();
+            return userArea !== null ? userArea : parseFloat(computedArea.toFixed(2));
+        }
+
         // Calculate polygon area in hectares using Web Mercator projection + shoelace
         function polygonAreaHectares(coordinatesLngLat) {
             const ring = normalizePolygonRing(coordinatesLngLat);
@@ -4975,6 +5541,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             const toRad = (d) => d * Math.PI / 180;
             const openRing = ring.slice(0, -1);
             const n = openRing.length;
+            if (n < 3) return 0;
             // Project to Web Mercator
             const projected = openRing.map(([lng, lat]) => {
                 const x = R * toRad(lng);
@@ -4982,21 +5549,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 return [x, y];
             });
             let sum = 0;
-            for (let i = 0; i < n - 1; i++) {
+            for (let i = 0; i < n; i++) {
                 const [x1, y1] = projected[i];
-                const [x2, y2] = projected[i + 1];
+                const [x2, y2] = projected[(i + 1) % n];
                 sum += (x1 * y2) - (x2 * y1);
             }
-            // Close edge between last and first
-            const [xN, yN] = projected[n - 1];
-            const [x0, y0] = projected[0];
-            sum += (xN * y0) - (x0 * yN);
             const areaM2 = Math.abs(sum) / 2;
             return areaM2 / 10000; // hectares
         }
 
-        function finishPolygon() {
-            const closed = normalizePolygonRing(currentPolygon);
+        function finishPolygon(optionalRing) {
+            const closed = normalizePolygonRing(optionalRing || currentPolygon);
             if (!closed) { showToast(t('toast.needVertices', 'Need at least 3 vertices')); return false; }
             if (supplementalCaptureContext) {
                 finishSupplementalPolygonCapture(closed);
@@ -5006,10 +5569,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 finishFeatureGeometryEdit(closed);
                 return true;
             }
-            // Respect user-provided area; only auto-calc if left empty
-            const userAreaInput = document.getElementById('area')?.value;
-            const computedArea = polygonAreaHectares(closed);
-            const areaValue = userAreaInput ? parseFloat(userAreaInput) : parseFloat(computedArea.toFixed(2));
+            const areaValue = resolveSavedPolygonAreaHectares(closed, !!optionalRing);
             const feature = {
                 type: 'Feature',
                 geometry: { type: 'Polygon', coordinates: [closed] },
@@ -5247,83 +5807,133 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         }
 
         // Consume files shared via Web Share Target (stored in cache by SW)
-        let consumingSharedFiles = false;
         async function consumeSharedFiles() {
-            if (consumingSharedFiles) return;
-            consumingSharedFiles = true;
             try {
-                // Drop ?shared=1 so a reload or restored tab doesn't re-run the import flow
-                const url = new URL(location.href);
-                url.searchParams.delete('shared');
-                history.replaceState(history.state, '', url);
-
                 const cache = await caches.open('georoots-shared-files');
                 const keys = await cache.keys();
-                const files = [];
+                if (!keys || keys.length === 0) return;
+                // Load blobs
+                const entries = [];
                 for (const req of keys) {
                     const res = await cache.match(req);
                     if (!res) continue;
-                    const rawName = res.headers.get('X-Filename') || '';
-                    let name;
-                    try { name = decodeURIComponent(rawName); } catch (_) { name = rawName; }
-                    files.push(new File([await res.blob()], name, { type: res.headers.get('Content-Type') || '' }));
+                    const blob = await res.blob();
+                    const fname = res.headers.get('X-Filename') || 'shared.geojson';
+                    entries.push({ blob, name: fname });
                 }
+                // Clear after reading
                 await Promise.all(keys.map(k => cache.delete(k)));
-                await importFilesWithChoice(files);
+
+                if (entries.length === 0) return;
+                // If multiple files, handle one by one with choice modal
+                await importSharedEntriesWithChoice(entries);
             } catch (e) {
                 console.error('Failed to consume shared files', e);
-            } finally {
-                consumingSharedFiles = false;
             }
         }
 
-        // Ask once per batch how to import, then import all files that way
-        async function importFilesWithChoice(files) {
-            if (!files.length) { showToast(t('import.nothingReceived', 'No file was received')); return; }
-            const mode = await askImportMode(files.length);
-            if (mode) await importGeoJSONFiles(files, mode);
+        async function importSharedEntriesWithChoice(entries) {
+            // Present choice modal; upon click, import accordingly
+            let idx = 0;
+            const modal = document.getElementById('importChoiceModal');
+            const close = () => { if (modal) modal.classList.add('hidden'); };
+            const btnAsFeatures = document.getElementById('btnImportAsFeatures');
+            const btnAsOverlay = document.getElementById('btnImportAsOverlay');
+            const btnCancel = document.getElementById('btnImportChoiceCancel');
+            const btnClose = document.getElementById('btnCloseImportChoice');
+
+            const handleEntry = async () => {
+                if (idx >= entries.length) { close(); return; }
+                const { blob, name } = entries[idx];
+                const file = new File([blob], name, { type: blob.type || 'application/geo+json' });
+                // Show modal and await choice
+                deactivateAllContexts();
+                modal.classList.remove('hidden');
+
+                await new Promise((resolve) => {
+                    const onFeatures = () => { importGeoJSONAsFeatures(file); cleanup(); resolve(); };
+                    const onOverlay = () => { handleOverlayFile(file); cleanup(); resolve(); };
+                    const onCancel = () => { cleanup(); resolve(); };
+                    function cleanup() {
+                        btnAsFeatures.removeEventListener('click', onFeatures);
+                        btnAsOverlay.removeEventListener('click', onOverlay);
+                        btnCancel.removeEventListener('click', onCancel);
+                        btnClose.removeEventListener('click', onCancel);
+                        close();
+                    }
+                    btnAsFeatures.addEventListener('click', onFeatures);
+                    btnAsOverlay.addEventListener('click', onOverlay);
+                    btnCancel.addEventListener('click', onCancel);
+                    btnClose.addEventListener('click', onCancel);
+                });
+
+                idx++;
+                await handleEntry();
+            };
+
+            await handleEntry();
         }
 
-        // Resolves to 'features' | 'overlay' | null (cancelled). Button handlers are bound once
-        // below, so no stale per-call listeners can outlive the choice they were made for.
-        let resolveImportChoice = null;
-        function askImportMode(count) {
-            deactivateAllContexts(); // also cancels any choice still pending
-            document.getElementById('importChoiceMessage').textContent = count > 1
-                ? t('import.chooseMethodMultiple', `How would you like to import ${count} files?`, { count })
-                : t('import.chooseMethod', 'How would you like to import the file?');
-            document.getElementById('importChoiceModal').classList.remove('hidden');
-            return new Promise(resolve => {
-                resolveImportChoice = (mode) => {
-                    resolveImportChoice = null;
-                    document.getElementById('importChoiceModal').classList.add('hidden');
-                    resolve(mode);
-                };
-            });
-        }
-        const chooseImportMode = (mode) => { if (resolveImportChoice) resolveImportChoice(mode); };
-        document.getElementById('btnImportAsFeatures').onclick = () => chooseImportMode('features');
-        document.getElementById('btnImportAsOverlay').onclick = () => chooseImportMode('overlay');
-        document.getElementById('btnImportChoiceCancel').onclick = () => chooseImportMode(null);
-        document.getElementById('btnCloseImportChoice').onclick = () => chooseImportMode(null);
-
-        // The import mode is set on every open, so a cancelled picker can't leak its mode into the next one
-        function openImportPicker(mode) {
-            const input = document.getElementById('fileInput');
-            input.dataset.importType = mode;
-            input.click();
+        // Load overlay
+        function handleOverlayFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const gj = JSON.parse(e.target.result);
+                    initializeMapIfNeeded();
+                    const color = getNextOverlayColor();
+                    const layer = L.geoJSON(gj, {
+                        style: { 
+                            color, 
+                            weight: 2, 
+                            opacity: 0.9, 
+                            fillColor: color, 
+                            fillOpacity: 0.2
+                        },
+                        pointToLayer: (f, latlng) => L.circleMarker(latlng, { 
+                            radius: 5, 
+                            color, 
+                            fillColor: color, 
+                            fillOpacity: 0.9,
+                            pane: 'markerPane'
+                        }),
+                        onEachFeature: (feature, layer) => {
+                            layer.bindPopup(createFeaturePopup(feature));
+                        }
+                    }).addTo(map);
+                    const ov = { name: file.name, layer, color, data: gj, isInteractive: true };
+                    customOverlays.push(ov);
+                    setOverlayInteractivity(ov, true);
+                    saveCustomOverlays();
+                    ensureOverlaysOnTop();
+                    // Refresh overlay lists
+                    renderCustomOverlayOptions();
+                    if (document.getElementById('layersModal') && !document.getElementById('layersModal').classList.contains('hidden')) {
+                        renderLayerOptions();
+                    }
+                    showToast(t('overlay.loaded', `Overlay loaded: ${file.name}`, { name: file.name }));
+                } catch(err) { showToast(t('import.invalidGeojson', 'Invalid GeoJSON')); }
+            };
+            reader.readAsText(file);
         }
 
         // Event listeners
         if (document.getElementById('btnCreatePoint')) document.getElementById('btnCreatePoint').onclick = () => showForm('Point');
         if (document.getElementById('btnCreatePolygon')) document.getElementById('btnCreatePolygon').onclick = () => showForm('Polygon');
-        document.getElementById('btnLoadOverlay').onclick = () => openImportPicker('overlay');
+        document.getElementById('btnLoadOverlay').onclick = () => document.getElementById('fileInput').click();
         if (document.getElementById('btnShowMap')) document.getElementById('btnShowMap').onclick = () => { pendingType = 'Point'; pendingProps = {}; showCapture(); };
         document.getElementById('fileInput').onchange = (e) => {
-            const files = Array.from(e.target.files || []);
-            const mode = e.target.dataset.importType === 'features' ? 'features' : 'overlay';
-            e.target.value = '';
-            importGeoJSONFiles(files, mode);
+            const file = e.target.files[0];
+            if (file) {
+                const mode = e.target.getAttribute('data-import-type') || 'overlay';
+                if (mode === 'features') {
+                    importGeoJSONAsFeatures(file);
+                } else {
+                    handleOverlayFile(file);
+                }
+            }
+            e.target.value='';
+            e.target.removeAttribute('data-import-type');
         };
         if (document.getElementById('btnExport')) document.getElementById('btnExport').onclick = exportGeoJSON;
 
@@ -5340,7 +5950,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 showToast(t('toast.featureUpdated', 'Feature updated'));
             } else {
                 pendingProps = updatedProps;
-                showCapture();
+                if (pendingType === 'Polygon' && pendingCaptureMode === 'current') {
+                    openPolygonCaptureMethodChooser('primary');
+                } else {
+                    pendingPolygonCaptureMethod = 'manual';
+                    showCapture();
+                }
             }
         };
 
@@ -5353,7 +5968,62 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         document.getElementById('btnAddVertex').onclick = addVertexFromCurrent;
         document.getElementById('btnUndoVertex').onclick = undoVertex;
         document.getElementById('btnFinishPolygon').onclick = finishPolygon;
-        document.getElementById('btnCancelCapturePolygon').onclick = () => { supplementalCaptureContext = null; geometryEditContext = null; currentPolygon = []; clearWorkingPolyline(); showMainView(); hideAccuracyBubble(); };
+        document.getElementById('btnCancelCapturePolygon').onclick = () => { supplementalCaptureContext = null; geometryEditContext = null; currentPolygon = []; clearWorkingPolyline(); stopPolygonRecordingSession(false); showMainView(); hideAccuracyBubble(); };
+
+        document.getElementById('btnCaptureMethodManual').onclick = beginManualPolygonCaptureFromChooser;
+        document.getElementById('btnCaptureMethodAuto').onclick = beginAutomaticPolygonCaptureFromChooser;
+        document.getElementById('btnCloseCaptureMethod').onclick = () => {
+            closePolygonCaptureMethodChooser();
+            document.getElementById('featureForm').classList.remove('hidden');
+        };
+        document.getElementById('btnRecordingStart').onclick = startPolygonRecording;
+        document.getElementById('btnRecordingPause').onclick = pausePolygonRecording;
+        document.getElementById('btnRecordingResume').onclick = resumePolygonRecording;
+        document.getElementById('btnRecordingFinish').onclick = finishPolygonRecording;
+        document.getElementById('btnRecordingCancel').onclick = () => {
+            stopPolygonRecordingSession(false);
+            showToast(t('recording.toastCancelled', 'Recording cancelled'));
+            if (supplementalCaptureContext) {
+                supplementalCaptureContext = null;
+                document.getElementById('featureForm').classList.remove('hidden');
+            } else {
+                showMainView();
+            }
+        };
+        document.getElementById('btnCloseRecordingWarning').onclick = () => {
+            document.getElementById('recordingWarningModal').classList.add('hidden');
+            openPolygonCaptureMethodChooser(captureMethodContext || 'primary');
+        };
+        document.getElementById('btnRecordingWarningCancel').onclick = () => {
+            document.getElementById('recordingWarningModal').classList.add('hidden');
+            openPolygonCaptureMethodChooser(captureMethodContext || 'primary');
+        };
+        document.getElementById('btnRecordingWarningContinue').onclick = () => {
+            const dismiss = document.getElementById('recordingWarningDismiss').checked;
+            if (dismiss) {
+                const s = loadSettings();
+                s.polygonRecording = { ...clampPolygonRecordingSettings(s.polygonRecording || {}), warningDismissed: true };
+                saveSettings(s);
+                const showWarn = document.getElementById('settingsShowRecordingWarning');
+                if (showWarn) showWarn.checked = false;
+            }
+            document.getElementById('recordingWarningModal').classList.add('hidden');
+            openAutomaticPolygonRecording(captureMethodContext || 'primary');
+        };
+        document.getElementById('btnRecordingReviewRetry').onclick = resumeRecordingAfterReview;
+        document.getElementById('btnRecordingReviewStartOver').onclick = startOverRecordingAfterReview;
+        document.getElementById('btnRecordingReviewConfirm').onclick = confirmRecordingReview;
+
+        document.addEventListener('visibilitychange', () => {
+            const session = polygonRecordingSession;
+            if (!session || session.status !== 'recording') return;
+            if (document.hidden) {
+                session.hiddenAt = Date.now();
+            } else if (session.hiddenAt) {
+                session.hiddenAt = null;
+                markRecordingInterruption();
+            }
+        });
 
         if (document.getElementById('btnLayers')) document.getElementById('btnLayers').onclick = openLayersModal;
         document.getElementById('btnCloseLayers').onclick = closeLayersModal;
@@ -5631,24 +6301,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             startTracking();
             updateOnlineStatus();
             
-            // Handle URL parameters for shortcuts and deep linking (before the SW update check,
-            // which can take seconds on a poor connection)
-            handleURLParams();
-
-            // Files opened with the app via manifest file_handlers ("Open with")
-            if ('launchQueue' in window) {
-                window.launchQueue.setConsumer(async ({ files }) => {
-                    if (!files || !files.length) return;
-                    try {
-                        await importFilesWithChoice(await Promise.all(files.map(handle => handle.getFile())));
-                    } catch (e) {
-                        console.error('Failed to open launched files', e);
-                    }
-                });
-            }
-            
             // Register service worker
             await registerServiceWorker();
+            
+            // Handle URL parameters for shortcuts and deep linking
+            handleURLParams();
             
             // Initialize tile cache
             try {
@@ -5689,7 +6346,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         document.getElementById('menuDownloadMaps').onclick = () => { deactivateAllContexts(); closeSidebar(); openCacheModal(); };
         document.getElementById('menuExportGeoJSON').onclick = () => { deactivateAllContexts(); closeSidebar(); exportGeoJSON(); };
         document.getElementById('menuExportCSV').onclick = () => { deactivateAllContexts(); closeSidebar(); exportCSV(); };
-        document.getElementById('menuImportGeoJSON').onclick = () => { deactivateAllContexts(); closeSidebar(); openImportPicker('features'); };
+        document.getElementById('menuImportGeoJSON').onclick = () => { deactivateAllContexts(); closeSidebar(); document.getElementById('fileInput').setAttribute('data-import-type','features'); document.getElementById('fileInput').click(); };
         document.getElementById('menuImportOverlay').onclick = () => { deactivateAllContexts(); closeSidebar(); openOverlaysModal(); };
         document.getElementById('menuSettings').onclick = () => { 
             deactivateAllContexts(); 
@@ -5875,6 +6532,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             renderExportProperties();
             hideAddPropertyForm();
 
+            const recording = current.polygonRecording || clampPolygonRecordingSettings({});
+            const minMove = document.getElementById('settingsMinMovement');
+            const interval = document.getElementById('settingsRecordingInterval');
+            const showWarn = document.getElementById('settingsShowRecordingWarning');
+            if (minMove) minMove.value = String(recording.minDistanceM);
+            if (interval) interval.value = String(recording.intervalMs / 1000);
+            if (showWarn) showWarn.checked = !recording.warningDismissed;
+
             document.getElementById('settingsModal').classList.remove('hidden');
         }
         document.getElementById('btnCloseSettings').onclick = () => document.getElementById('settingsModal').classList.add('hidden');
@@ -5891,6 +6556,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             s.additionalFields = document.getElementById('settingsAdditionalFields').value;
             saveSettings(s);
         });
+
+        function persistPolygonRecordingSettingsFromUi() {
+            const s = loadSettings();
+            s.polygonRecording = clampPolygonRecordingSettings({
+                minDistanceM: document.getElementById('settingsMinMovement')?.value,
+                intervalMs: (Number(document.getElementById('settingsRecordingInterval')?.value) || 2) * 1000,
+                warningDismissed: !(document.getElementById('settingsShowRecordingWarning')?.checked)
+            });
+            saveSettings(s);
+        }
+        document.getElementById('settingsMinMovement')?.addEventListener('change', persistPolygonRecordingSettingsFromUi);
+        document.getElementById('settingsRecordingInterval')?.addEventListener('change', persistPolygonRecordingSettingsFromUi);
+        document.getElementById('settingsShowRecordingWarning')?.addEventListener('change', persistPolygonRecordingSettingsFromUi);
         
         // Export properties UI handlers
         document.getElementById('btnAddExportProperty').onclick = showAddPropertyForm;
@@ -6365,3 +7043,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     </script>
 </body>
 </html>
+
+    </html>
+    </html>
