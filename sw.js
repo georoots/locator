@@ -1,8 +1,8 @@
 // GeoRoots Locator - Service Worker
-// Version 2.6.3 - Walk-around polygon capture with automatic perimeter recording
+// Version 2.6.4 - Resume interrupted walk-around recordings
 
-const CACHE_NAME = 'georoots-locator-v2.6.3';
-const STATIC_CACHE_NAME = 'georoots-locator-static-v2.6.3';
+const CACHE_NAME = 'georoots-locator-v2.6.4';
+const STATIC_CACHE_NAME = 'georoots-locator-static-v2.6.4';
 
 // Files to cache for offline use (app shell)
 // Note: Leaflet CSS/JS now inlined in HTML, no external dependencies

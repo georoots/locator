@@ -1645,7 +1645,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 <div style="font-size:14px; color:var(--gray-dark);margin-top: 8px;" data-i18n="about.privacy">All data is stored locally on your device, no information is transmitted to ANY servers.</div>
                 <div style="font-size:14px; color:var(--gray-dark);margin-top: 8px;" data-i18n-html="about.openSource">This app is free and open source, and all code is available on <a href="https://github.com/georoots" target="_blank">GitHub</a>. You are welcome to submit your contributions to the project. Any issues or suggestions, please report them on <a href="https://github.com/georooots/locator/issues" target="_blank">GitHub Issues</a> or via email to <a href="mailto:info@georoots.eu">info@georoots.eu</a>.</div>
                 <div style="font-size:14px; color:var(--gray-dark);margin-top: 8px;" data-i18n-html="about.moreTools">For more free tools, visit <a href="https://georoots.eu/" target="_blank">georoots.eu</a>.</div>
-                <div style="margin-top:8px; font-size:12px; color:var(--gray-medium);"><span data-i18n="about.versionLabel">Version:</span> 2.6.3</div>
+                <div style="margin-top:8px; font-size:12px; color:var(--gray-medium);"><span data-i18n="about.versionLabel">Version:</span> 2.6.4</div>
                 <div style="margin-top:16px;">
                     <button class="btn btn-primary btn-block" id="btnInstallAppManual" style="display:none;" data-i18n="install.title">Install App</button>
                 </div>
@@ -1773,6 +1773,22 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 <div style="display:flex; gap:8px;">
                     <button class="btn btn-primary btn-block" id="btnRecordingWarningContinue" data-i18n="recording.warningContinue">Continue</button>
                     <button class="btn btn-secondary btn-block" id="btnRecordingWarningCancel" data-i18n="recording.warningCancel">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Unfinished automatic recording found at startup -->
+    <div id="recordingResumeModal" class="modal hidden" role="dialog" aria-modal="true">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div data-i18n="recording.draftTitle">Unfinished recording</div>
+            </div>
+            <div class="modal-body">
+                <div id="recordingResumeMessage" style="font-size:13px; line-height:1.5; margin-bottom:12px;"></div>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn btn-primary btn-block" id="btnRecordingDraftResume" data-i18n="recording.draftResume">Resume</button>
+                    <button class="btn btn-danger btn-block" id="btnRecordingDraftDiscard" data-i18n="recording.draftDiscard">Discard</button>
                 </div>
             </div>
         </div>
@@ -2551,6 +2567,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 'recording.reviewRetry': 'Keep recording',
                 'recording.reviewStartOver': 'Start over',
                 'recording.toastStartOver': 'Recording reset',
+                'recording.draftTitle': 'Unfinished recording',
+                'recording.draftFound': 'A boundary recording was interrupted before it was saved ({count} points, last saved {time}).',
+                'recording.draftCannotResume': 'It can no longer be resumed because the form it belongs to has changed.',
+                'recording.draftResume': 'Resume',
+                'recording.draftDiscard': 'Discard',
+                'recording.draftDiscardConfirm': 'Discard the recorded track? This cannot be undone.',
+                'recording.toastDraftResumed': 'Recording restored and paused. Walk back to where you stopped, then tap Resume.',
                 'recording.reviewInsufficient': 'Not enough valid GPS points to build a polygon. Keep walking or switch to manual capture.',
                 'recording.reviewInvalidPolygon': 'The cleaned polygon is not valid (self-intersecting or degenerate). Keep recording or start over.',
                 'recording.toastStarted': 'Recording started',
@@ -5076,8 +5099,130 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 lastFixAt: 0,
                 hiddenAt: null,
                 hadInterruption: false,
-                pendingReview: null
+                pendingReview: null,
+                formSnapshot: captureRecordingFormSnapshot(context)
             };
+        }
+
+        // Everything needed to rebuild the capture after the app was closed or killed mid-walk
+        function captureRecordingFormSnapshot(context) {
+            return {
+                pendingType,
+                pendingCaptureMode,
+                pendingPolygonCaptureMethod,
+                props: context === 'primary' ? pendingProps : collectFeatureFormProperties(),
+                supplementalValues: formSupplementalValues,
+                editingIndex,
+                editingTimestamp: editingIndex !== null ? features[editingIndex]?.properties?.Timestamp ?? null : null,
+                fieldGeometryKey: supplementalCaptureContext?.field?.geometryKey ?? null
+            };
+        }
+
+        const RECORDING_DRAFT_KEY = 'geolocator.recordingDraft';
+
+        function saveRecordingDraft() {
+            const session = polygonRecordingSession;
+            if (!session || persistConsent === 'false') return;
+            if (session.rawTrack.length === 0) { clearRecordingDraft(); return; }
+            const draft = {
+                savedAt: Date.now(),
+                context: session.context,
+                rawTrack: session.rawTrack,
+                config: session.config,
+                form: session.formSnapshot
+            };
+            try { localStorage.setItem(RECORDING_DRAFT_KEY, JSON.stringify(draft)); } catch (_) {}
+        }
+
+        function clearRecordingDraft() {
+            try { localStorage.removeItem(RECORDING_DRAFT_KEY); } catch (_) {}
+        }
+
+        function loadRecordingDraft() {
+            try {
+                const draft = JSON.parse(localStorage.getItem(RECORDING_DRAFT_KEY));
+                const track = Array.isArray(draft?.rawTrack)
+                    ? draft.rawTrack.filter(c => Array.isArray(c) && Number.isFinite(c[0]) && Number.isFinite(c[1]))
+                    : [];
+                if (!track.length || !['primary', 'supplemental'].includes(draft.context) || !draft.form) return null;
+                return { ...draft, rawTrack: track };
+            } catch (_) {
+                return null;
+            }
+        }
+
+        // The draft can only be resumed into the form it came from
+        function findRecordingDraftField(draft) {
+            const { form } = draft;
+            if (form.editingIndex !== null && features[form.editingIndex]?.properties?.Timestamp !== form.editingTimestamp) return null;
+            if (draft.context === 'primary') return {};
+            return getAdditionalFieldsProfile().find(f => f.type === 'supplementalPolygon' && f.geometryKey === form.fieldGeometryKey) || null;
+        }
+
+        function offerRecordingDraftResume() {
+            const draft = loadRecordingDraft();
+            if (!draft) return;
+            const field = findRecordingDraftField(draft);
+            let time = '';
+            try { time = new Date(draft.savedAt).toLocaleString(loadSettings().language); } catch (_) {}
+            const message = t('recording.draftFound', `A boundary recording was interrupted before it was saved (${draft.rawTrack.length} points, last saved ${time}).`, {
+                count: draft.rawTrack.length,
+                time
+            });
+            document.getElementById('recordingResumeMessage').textContent = field
+                ? message
+                : `${message} ${t('recording.draftCannotResume', 'It can no longer be resumed because the form it belongs to has changed.')}`;
+            const btnResume = document.getElementById('btnRecordingDraftResume');
+            btnResume.classList.toggle('hidden', !field);
+            btnResume.onclick = () => resumeRecordingDraft(draft, field);
+            document.getElementById('btnRecordingDraftDiscard').onclick = () => {
+                if (!confirm(t('recording.draftDiscardConfirm', 'Discard the recorded track? This cannot be undone.'))) return;
+                clearRecordingDraft();
+                document.getElementById('recordingResumeModal').classList.add('hidden');
+            };
+            document.getElementById('recordingResumeModal').classList.remove('hidden');
+        }
+
+        function resumeRecordingDraft(draft, field) {
+            const { form } = draft;
+            document.getElementById('recordingResumeModal').classList.add('hidden');
+            deactivateAllContexts();
+            if (draft.context === 'supplemental') {
+                if (form.editingIndex !== null) showEditForm(form.editingIndex);
+                else showForm(form.pendingType || 'Polygon');
+                formSupplementalValues = form.supplementalValues || {};
+                const props = form.props || {};
+                document.getElementById('producerName').value = props.ProducerName || '';
+                document.getElementById('productionPlace').value = props.ProductionPlace || '';
+                document.getElementById('area').value = props.Area ?? '';
+                document.getElementById('fieldNotes').value = props.FieldNotes || '';
+                renderAdditionalFields(props);
+                if (form.editingIndex === null) {
+                    pendingCaptureMode = form.pendingCaptureMode || 'current';
+                    pendingPolygonCaptureMethod = form.pendingPolygonCaptureMethod || 'manual';
+                }
+                startSupplementalPolygonCapture(field, 'auto');
+            } else {
+                pendingType = form.pendingType || 'Polygon';
+                pendingProps = form.props || {};
+                pendingCaptureMode = 'current';
+                pendingPolygonCaptureMethod = 'auto';
+                openAutomaticPolygonRecording('primary');
+            }
+            const session = polygonRecordingSession;
+            Object.assign(session, {
+                status: 'paused',
+                rawTrack: draft.rawTrack,
+                config: clampPolygonRecordingSettings(draft.config || {}),
+                lastAcceptedCoord: draft.rawTrack[draft.rawTrack.length - 1],
+                hadInterruption: true,
+                formSnapshot: form
+            });
+            redrawRecordingTrack();
+            try { map.fitBounds(recordingTrackLayer.getBounds(), { padding: [40, 40], maxZoom: 18 }); } catch (_) {}
+            updateRecordingToolbarUI();
+            saveRecordingDraft();
+            showToast(t('recording.toastDraftResumed', 'Recording restored and paused. Walk back to where you stopped, then tap Resume.'));
         }
 
         // Translation keys are `${key}Title` and `${key}Description`
@@ -5177,6 +5322,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             if (!polygonRecordingSession.hadInterruption) {
                 polygonRecordingSession.hadInterruption = true;
                 updateRecordingToolbarUI();
+                saveRecordingDraft();
                 showToast(t('recording.toastInterruption', 'GPS tracking was interrupted. Path reconnected.'));
             }
         }
@@ -5202,6 +5348,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             session.lastAcceptedCoord = coord;
             redrawRecordingTrack();
             updateRecordingToolbarUI();
+            saveRecordingDraft();
         }
 
         function startPolygonRecording() {
@@ -5225,6 +5372,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             polygonRecordingSession.status = 'paused';
             releaseWakeLock('recording');
             updateRecordingToolbarUI();
+            saveRecordingDraft();
             showToast(t('recording.toastPaused', 'Recording paused'));
         }
 
@@ -5240,6 +5388,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         function cancelPolygonRecording(showMain = true) {
             releaseWakeLock('recording');
             polygonRecordingSession = null;
+            clearRecordingDraft();
             clearRecordingPreviewLayers();
             hideAutoRecordingToolbar();
             hideRecordingReviewToolbar();
@@ -5372,6 +5521,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             polygonRecordingSession.lastAcceptedCoord = null;
             polygonRecordingSession.lastFixAt = 0;
             polygonRecordingSession.hadInterruption = false;
+            clearRecordingDraft();
             clearRecordingPreviewLayers();
             hideRecordingReviewToolbar();
             document.getElementById('captureToolbarAutoRecord').classList.remove('hidden');
@@ -5404,10 +5554,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             } else {
                 finishPolygon(normalizedRing);
             }
+            clearRecordingDraft();
         }
 
         function stopPolygonRecordingSession(resetUi = true) {
             releaseWakeLock('recording');
+            if (polygonRecordingSession) clearRecordingDraft();
             polygonRecordingSession = null;
             clearRecordingPreviewLayers();
             if (resetUi) {
@@ -6313,6 +6465,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             renderFeatureList();
             startTracking();
             updateOnlineStatus();
+            offerRecordingDraftResume();
             
             // Handle URL parameters for shortcuts and deep linking (before the SW update check,
             // which can take seconds on a poor connection)
