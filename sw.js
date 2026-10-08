@@ -1,8 +1,10 @@
 // GeoRoots Locator - Service Worker
-// Version 2.4.1 - Multi-file import, broader share target, overlay import fix
+// Version 2.4.2 - Field data in IndexedDB, persistent storage, backup reminders
 
-const CACHE_NAME = 'georoots-locator-v2.4.1';
-const STATIC_CACHE_NAME = 'georoots-locator-static-v2.4.1';
+const CACHE_NAME = 'georoots-locator-v2.4.2';
+const STATIC_CACHE_NAME = 'georoots-locator-static-v2.4.2';
+// Not versioned, so app updates don't wipe tiles cached while browsing the map
+const TILE_CACHE_NAME = 'georoots-tiles';
 
 // Files to cache for offline use (app shell)
 // Note: Leaflet CSS/JS now inlined in HTML, no external dependencies
@@ -238,10 +240,9 @@ self.addEventListener('fetch', event => {
                             // Cache successful tile responses for future use
                             if (response && response.status === 200) {
                                 const responseToCache = response.clone();
-                                caches.open(CACHE_NAME)
-                                    .then(cache => {
-                                        cache.put(request, responseToCache);
-                                    });
+                                caches.open(TILE_CACHE_NAME)
+                                    .then(cache => cache.put(request, responseToCache))
+                                    .catch(() => {});
                             }
                             return response;
                         })
