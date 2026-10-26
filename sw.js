@@ -1,8 +1,8 @@
 // GeoRoots Locator - Service Worker
-// Version 2.6.5 - Field data in IndexedDB, persistent storage, backup reminders
+// Version 2.6.7 - Error log export from the About page
 
-const CACHE_NAME = 'georoots-locator-v2.6.5';
-const STATIC_CACHE_NAME = 'georoots-locator-static-v2.6.5';
+const CACHE_NAME = 'georoots-locator-v2.6.7';
+const STATIC_CACHE_NAME = 'georoots-locator-static-v2.6.7';
 // Not versioned, so app updates don't wipe tiles cached while browsing the map
 const TILE_CACHE_NAME = 'georoots-tiles';
 

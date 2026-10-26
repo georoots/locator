@@ -1665,7 +1665,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         <div class="modal-card">
             <div class="modal-header">
                 <div data-i18n="about.title">About</div>
-                <button class="btn btn-light btn-small" id="btnCloseAbout" data-i18n="common.close">Close</button>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn btn-light btn-small" id="btnExportLogs" data-i18n="about.logs">Logs</button>
+                    <button class="btn btn-light btn-small" id="btnCloseAbout" data-i18n="common.close">Close</button>
+                </div>
             </div>
             <div class="modal-body">
                 <div style="font-weight:700; margin-bottom:6px; color:var(--primary-color);" data-i18n="app.name">GeoRoots Locator</div>
@@ -1673,7 +1676,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 <div style="font-size:14px; color:var(--gray-dark);margin-top: 8px;" data-i18n="about.privacy">All data is stored locally on your device, no information is transmitted to ANY servers.</div>
                 <div style="font-size:14px; color:var(--gray-dark);margin-top: 8px;" data-i18n-html="about.openSource">This app is free and open source, and all code is available on <a href="https://github.com/georoots" target="_blank">GitHub</a>. You are welcome to submit your contributions to the project. Any issues or suggestions, please report them on <a href="https://github.com/georooots/locator/issues" target="_blank">GitHub Issues</a> or via email to <a href="mailto:info@georoots.eu">info@georoots.eu</a>.</div>
                 <div style="font-size:14px; color:var(--gray-dark);margin-top: 8px;" data-i18n-html="about.moreTools">For more free tools, visit <a href="https://georoots.eu/" target="_blank">georoots.eu</a>.</div>
-                <div style="margin-top:8px; font-size:12px; color:var(--gray-medium);"><span data-i18n="about.versionLabel">Version:</span> 2.6.5</div>
+                <div style="margin-top:8px; font-size:12px; color:var(--gray-medium);"><span data-i18n="about.versionLabel">Version:</span> <span id="appVersion"></span></div>
                 <div style="margin-top:16px;">
                     <button class="btn btn-primary btn-block" id="btnInstallAppManual" style="display:none;" data-i18n="install.title">Install App</button>
                 </div>
@@ -2018,6 +2021,54 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     ============================================================================
     -->
     <script>
+        // Runs before every other script so that their errors are recorded too
+        const APP_VERSION = '2.6.7';
+
+        // Errors and warnings kept on the device so that users without dev tools can send them in
+        const errorLog = (() => {
+            const KEY = 'geolocator.errorLog';
+            const MAX_ENTRIES = 100;
+            const MAX_LENGTH = 2000;
+            let entries = [];
+            try { entries = JSON.parse(localStorage.getItem(KEY)) || []; } catch (_) {}
+            if (!Array.isArray(entries)) entries = [];
+
+            function describe(value) {
+                if (value instanceof Error) return value.stack || `${value.name}: ${value.message}`;
+                if (typeof value === 'string') return value;
+                try { return JSON.stringify(value); } catch (_) { return String(value); }
+            }
+
+            function add(level, values) {
+                try {
+                    const text = values.map(describe).join(' ');
+                    const message = text.length > MAX_LENGTH ? `${text.slice(0, MAX_LENGTH)}…` : text;
+                    const time = new Date().toISOString();
+                    const last = entries[entries.length - 1];
+                    // A repeating error (e.g. in a loop) becomes one entry with a count
+                    if (last && last.level === level && last.message === message) {
+                        last.count = (last.count || 1) + 1;
+                        last.time = time;
+                    } else {
+                        entries.push({ time, version: APP_VERSION, level, message });
+                        if (entries.length > MAX_ENTRIES) entries.splice(0, entries.length - MAX_ENTRIES);
+                    }
+                    localStorage.setItem(KEY, JSON.stringify(entries));
+                } catch (_) {}
+            }
+
+            ['error', 'warn'].forEach(level => {
+                const original = console[level].bind(console);
+                console[level] = (...values) => { add(level, values); original(...values); };
+            });
+            window.addEventListener('error', e => add('error', [e.error || `${e.message} (${e.filename}:${e.lineno}:${e.colno})`]));
+            window.addEventListener('unhandledrejection', e => add('error', ['Unhandled promise rejection:', e.reason]));
+
+            return { entries: () => entries.slice() };
+        })();
+        document.getElementById('appVersion').textContent = APP_VERSION;
+    </script>
+    <script>
     /* @preserve
     * Leaflet 1.9.4, a JS library for interactive maps. https://leafletjs.com
     * (c) 2010-2023 Vladimir Agafonkin, (c) 2010-2011 CloudMade
@@ -2164,14 +2215,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             'Other crop': 'field.otherCrop',
             'Non-compliances': 'field.nonCompliances'
         };
+        // Keys can come from imported files, so names like 'constructor' must not hit Object.prototype
+        function ownValue(object, key) {
+            return Object.prototype.hasOwnProperty.call(object, key) ? object[key] : undefined;
+        }
         function getFieldLabel(key, fallback = key) {
-            const translationKey = FIELD_TRANSLATION_KEYS[key];
+            const translationKey = ownValue(FIELD_TRANSLATION_KEYS, key);
             return translationKey ? t(translationKey, fallback) : fallback;
         }
         function getFeatureTypeLabel(type) {
-            return type === 'Polygon'
-                ? t('feature.typePolygon', 'Polygon')
-                : t('feature.typePoint', 'Point');
+            if (type === 'Polygon') return t('feature.typePolygon', 'Polygon');
+            if (type === 'Point') return t('feature.typePoint', 'Point');
+            return propertyText(type);
         }
         const LAYER_TRANSLATION_KEYS = {
             'Street (OSM)': 'layer.streetOsm',
@@ -2182,7 +2237,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             'Tree Cover Loss (2021-2024)': 'layer.treeCoverLoss'
         };
         function getLayerDisplayName(name) {
-            const translationKey = LAYER_TRANSLATION_KEYS[name];
+            const translationKey = ownValue(LAYER_TRANSLATION_KEYS, name);
             return translationKey ? t(translationKey, name) : name;
         }
         function normalizeAdditionalField(field) {
@@ -2200,7 +2255,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         }
         function getAdditionalFieldsProfile() {
             const s = loadSettings();
-            const fields = ADDITIONAL_FIELDS_PROFILES[s.additionalFields] || ADDITIONAL_FIELDS_PROFILES.none;
+            const fields = ownValue(ADDITIONAL_FIELDS_PROFILES, s.additionalFields) || ADDITIONAL_FIELDS_PROFILES.none;
             return fields.map(normalizeAdditionalField).filter(Boolean);
         }
         function getSupplementalPolygonFieldsForProperties(props = {}) {
@@ -2655,6 +2710,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 'about.openSource': 'This app is free and open source, and all code is available on <a href="https://github.com/georoots" target="_blank">GitHub</a>. You are welcome to submit your contributions to the project. Any issues or suggestions, please report them on <a href="https://github.com/georooots/locator/issues" target="_blank">GitHub Issues</a> or via email to <a href="mailto:info@georoots.eu">info@georoots.eu</a>.',
                 'about.moreTools': 'For more free tools, visit <a href="https://georoots.eu/" target="_blank">georoots.eu</a>.',
                 'about.versionLabel': 'Version:',
+                'about.logs': 'Logs',
+                'about.logsExported': 'Log file saved',
                 'install.title': 'Install App',
                 'install.description': 'Install GeoRoots Locator for a better offline experience and quick access from your home screen.',
                 'install.later': 'Maybe Later',
@@ -2708,6 +2765,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 'import.noValidFeatures': 'No valid features to import',
                 'import.parseFailed': 'Failed to parse GeoJSON',
                 'import.skippedFiles': 'Skipped {count} file(s) without valid GeoJSON: {names}',
+                'import.rejectedFeatures': 'Skipped {count} feature(s) with missing or invalid coordinates',
                 'import.nothingReceived': 'No file was received',
                 'storage.saveFailed': 'Could not save to this device. Export a backup now.',
                 'storage.badgeSaveFailed': 'Not saved!',
@@ -3724,10 +3782,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
         function addFeaturesFromGeoJSON(gj) {
             const fc = normalizeToFeatureCollection(gj);
-            if (!fc || !Array.isArray(fc.features)) return 0;
-            const valid = fc.features.map(normalizeFeatureGeometry).filter(Boolean);
+            if (!fc || !Array.isArray(fc.features)) return { added: 0, rejected: 0 };
+            const valid = fc.features.map(normalizeImportedFeature).filter(Boolean);
             valid.forEach(f => features.push(f));
-            return valid.length;
+            return { added: valid.length, rejected: fc.features.length - valid.length };
         }
 
         // Import files as working features or as custom overlays ('features' | 'overlay')
@@ -3735,6 +3793,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             if (!files.length) return;
             initializeMapIfNeeded();
             let featureCount = 0;
+            let rejectedCount = 0;
             const overlayNames = [];
             const skipped = [];
             for (const [index, file] of files.entries()) {
@@ -3743,8 +3802,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 if (!gj) {
                     skipped.push(name);
                 } else if (mode === 'features') {
-                    const count = addFeaturesFromGeoJSON(gj);
-                    if (count) featureCount += count; else skipped.push(name);
+                    const { added, rejected } = addFeaturesFromGeoJSON(gj);
+                    featureCount += added;
+                    if (added) rejectedCount += rejected; else skipped.push(name);
                 } else if (addCustomOverlay(gj, name)) {
                     overlayNames.push(name);
                 } else {
@@ -3764,6 +3824,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
             const messages = [];
             if (featureCount) messages.push(t('import.importedFeatures', `Imported ${featureCount} feature(s)`, { count: featureCount }));
+            if (rejectedCount) messages.push(t('import.rejectedFeatures', `Skipped ${rejectedCount} feature(s) with missing or invalid coordinates`, { count: rejectedCount }));
             if (overlayNames.length === 1) messages.push(t('overlay.loaded', `Overlay loaded: ${overlayNames[0]}`, { name: overlayNames[0] }));
             if (overlayNames.length > 1) messages.push(t('overlay.loadedMultiple', `${overlayNames.length} overlays loaded`, { count: overlayNames.length }));
             if (skipped.length) messages.push(t('import.skippedFiles', `Skipped ${skipped.length} file(s) without valid GeoJSON: ${skipped.join(', ')}`, { count: skipped.length, names: skipped.join(', ') }));
@@ -3780,23 +3841,23 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             return null;
         }
 
-        function normalizeFeatureGeometry(feature) {
+        // Nesting depth of the coordinates array for each supported geometry type
+        const GEOMETRY_DEPTH = { Point: 0, MultiPoint: 1, LineString: 1, MultiLineString: 2, Polygon: 2, MultiPolygon: 3 };
+
+        function isValidCoordinates(coords, depth) {
+            if (depth === 0) return isFiniteLngLat(coords);
+            return Array.isArray(coords) && coords.length > 0 && coords.every(c => isValidCoordinates(c, depth - 1));
+        }
+
+        // Imported features come from other apps: only accept geometry that can be drawn,
+        // and properties that are an object (property values themselves may be any JSON)
+        function normalizeImportedFeature(feature) {
             if (!feature || feature.type !== 'Feature') return null;
-            if (!feature.geometry) return null;
             const g = feature.geometry;
-            if (!g || !g.type) return null;
-            // Accept Point, MultiPoint, LineString, MultiLineString, Polygon, MultiPolygon
-            switch (g.type) {
-                case 'Point':
-                case 'MultiPoint':
-                case 'LineString':
-                case 'MultiLineString':
-                case 'Polygon':
-                case 'MultiPolygon':
-                    return feature;
-                default:
-                    return null;
-            }
+            const depth = g && typeof g.type === 'string' ? GEOMETRY_DEPTH[g.type] : undefined;
+            if (typeof depth !== 'number' || !isValidCoordinates(g.coordinates, depth)) return null;
+            const p = feature.properties;
+            return { ...feature, properties: p && typeof p === 'object' && !Array.isArray(p) ? p : {} };
         }
 
         // Load saved features and overlays (map must exist). Anything added before loading finished is kept.
@@ -3805,7 +3866,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             const [storedFeatures, storedOverlays] = await Promise.all([load(FEATURES_KEY), load(CUSTOM_OVERLAYS_KEY)]);
             const featuresAddedEarly = features;
             const overlaysAddedEarly = customOverlays.length;
-            features = (Array.isArray(storedFeatures) ? storedFeatures : []).concat(featuresAddedEarly);
+            features = (Array.isArray(storedFeatures) ? storedFeatures : [])
+                .filter(f => f && typeof f === 'object')
+                .concat(featuresAddedEarly);
             loadCustomOverlays(storedOverlays);
             storageReady = true;
             if (featuresAddedEarly.length) persistFeatures();
@@ -3850,10 +3913,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 const left = document.createElement('div');
                 const title = document.createElement('div');
                 title.className = 'feature-title';
-                title.textContent = (f.properties?.ProducerName || t('feature.untitled', 'Untitled')) + ' (' + getFeatureTypeLabel(f.geometry.type) + ')';
+                title.textContent = getFeatureListTitle(f);
                 const meta = document.createElement('div');
                 meta.className = 'feature-meta';
-                meta.textContent = (f.properties?.ProductionPlace || t('feature.noReference', 'No reference')) + (f.properties?.Area ? ' • ' + f.properties.Area + ' ha' : '');
+                const area = propertyText(f.properties?.Area);
+                meta.textContent = getFeatureListReference(f) + (area ? ` • ${area} ha` : '');
                 left.appendChild(title); left.appendChild(meta);
                 const right = document.createElement('div');
                 const edit = document.createElement('button');
@@ -3878,15 +3942,23 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             if (map) drawFeaturesOnMap();
         }
 
+        function getFeatureListTitle(f) {
+            return `${propertyText(f.properties?.ProducerName) || t('feature.untitled', 'Untitled')} (${getFeatureTypeLabel(f.geometry?.type)})`;
+        }
+
+        function getFeatureListReference(f) {
+            return propertyText(f.properties?.ProductionPlace) || t('feature.noReference', 'No reference');
+        }
+
         // Feature popup and map drawing functions
-        function createSupplementalToggleButtonHtml(featureIndex, field) {
+        function createSupplementalToggleButtonHtml(featureIndex, field, fieldIndex) {
             const isActive = supplementalPreviewLayer?.featureIndex === featureIndex && supplementalPreviewLayer?.geometryKey === field.geometryKey;
             const color = isActive ? '#40916c' : '#6c757d';
             const localizedLabel = getFieldLabel(field.key || field.areaKey, field.label);
             const title = isActive
                 ? t('supplemental.hide', `Hide ${localizedLabel}`, { label: localizedLabel })
                 : t('supplemental.show', `Show ${localizedLabel}`, { label: localizedLabel });
-            return `<button class="btn btn-light btn-small" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}" onclick="toggleSupplementalPolygonOverlay(${featureIndex}, '${encodeURIComponent(field.geometryKey)}', this)" style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; padding:0; margin-left:6px; vertical-align:middle; color:${color}; border-color:currentColor; background:transparent;">
+            return `<button class="btn btn-light btn-small" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}" onclick="toggleSupplementalPolygonOverlay(${featureIndex}, ${fieldIndex}, this)" style="display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; padding:0; margin-left:6px; vertical-align:middle; color:${color}; border-color:currentColor; background:transparent;">
                 <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" focusable="false" style="display:block;">
                     <polygon points="3,2 13,4 11,13 4,11" fill="currentColor" fill-opacity="0.22" stroke="currentColor" stroke-width="1.8" />
                 </svg>
@@ -3904,18 +3976,23 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 content += `<div style="font-weight: bold; margin-bottom: 8px;">${escapeHtml(getFeatureTypeLabel(props.FeatureType))}</div>`;
             }
             
+            const isEmpty = value => value === null || value === undefined || value === '';
             Object.keys(props).forEach(key => {
                 const value = props[key];
-                if (value !== null && value !== undefined && value !== '') {
-                    const geometryField = supplementalFields.find(field => field.geometryKey === key);
-                    if (geometryField) return;
-                    const fallbackKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-                    const displayKey = getFieldLabel(key, fallbackKey);
-                    const displayValue = formatPropertyValueForDisplay(value);
-                    const supplementalField = supplementalFields.find(field => field.areaKey === key);
-                    const toggle = supplementalField ? createSupplementalToggleButtonHtml(featureIndex, supplementalField) : '';
-                    content += `<div style="margin-bottom: 4px;"><strong>${escapeHtml(displayKey)}:</strong> ${escapeHtml(displayValue)}${toggle}</div>`;
-                }
+                if (isEmpty(value)) return;
+                const geometryField = supplementalFields.find(field => field.geometryKey === key);
+                // A supplemental polygon is shown on its area row, or on a row of its own when no area is stored
+                if (geometryField && !isEmpty(props[geometryField.areaKey])) return;
+                const supplementalField = geometryField || supplementalFields.find(field => field.areaKey === key);
+                const fallbackKey = /\s/.test(key) ? key : key.replace(/([A-Z])/g, ' $1').trim().replace(/^./, str => str.toUpperCase());
+                const displayKey = geometryField
+                    ? getFieldLabel(geometryField.key || geometryField.areaKey, geometryField.label)
+                    : getFieldLabel(key, fallbackKey);
+                const displayValue = geometryField
+                    ? formatArea(resolveSupplementalArea(null, getPolygonFeatureFromValue(value)))
+                    : formatPropertyValueForDisplay(value);
+                const toggle = supplementalField ? createSupplementalToggleButtonHtml(featureIndex, supplementalField, supplementalFields.indexOf(supplementalField)) : '';
+                content += `<div style="margin-bottom: 4px;"><strong>${escapeHtml(displayKey)}:</strong> ${escapeHtml(displayValue)}${toggle}</div>`;
             });
             
             if (typeof featureIndex === 'number' && !isNaN(featureIndex)) {
@@ -3925,6 +4002,33 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             }
             content += '</div>';
             return content;
+        }
+
+        // Features stored by older versions were not validated on import, and Leaflet throws on
+        // malformed coordinates: skip such a feature rather than break the whole map
+        function createFeatureLayer(feature) {
+            try {
+                return L.geoJSON(feature, {
+                    style: {
+                        color: '#1e5aff',
+                        weight: 3,
+                        opacity: 0.95,
+                        fillColor: '#1e5aff',
+                        fillOpacity: 0.25
+                    },
+                    pointToLayer: (f, latlng) => L.circleMarker(latlng, {
+                        radius: 8,
+                        color: '#1e5aff',
+                        fillColor: '#1e5aff',
+                        fillOpacity: 0.45,
+                        weight: 3,
+                        pane: 'markerPane'
+                    })
+                });
+            } catch (e) {
+                console.warn('Feature cannot be drawn', e);
+                return null;
+            }
         }
 
         function drawFeaturesOnMap() {
@@ -3938,25 +4042,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             let layerToOpen = null;
             features.forEach((feature, index) => {
                 if (geometryEditContext?.featureIndex === index) return;
-                const layer = L.geoJSON(feature, {
-                    style: {
-                        color: '#1e5aff',
-                        weight: 3,
-                        opacity: 0.95,
-                        fillColor: '#1e5aff',
-                        fillOpacity: 0.25
-                    },
-                    pointToLayer: (f, latlng) => {
-                        return L.circleMarker(latlng, {
-                            radius: 8,
-                            color: '#1e5aff',
-                            fillColor: '#1e5aff',
-                            fillOpacity: 0.45,
-                            weight: 3,
-                            pane: 'markerPane'
-                        });
-                    }
-                });
+                const layer = createFeatureLayer(feature);
+                if (!layer) return;
                 
                 layer.bindPopup(() => createFeaturePopup(feature, index));
                 featuresLayerGroup.addLayer(layer);
@@ -4913,10 +5000,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             const props = features[index]?.properties || {};
             formSupplementalValues = collectSupplementalValuesFromProps(props);
             document.getElementById('formTitle').textContent = t('feature.edit', 'Edit Feature');
-            document.getElementById('producerName').value = props.ProducerName || '';
-            document.getElementById('productionPlace').value = props.ProductionPlace || '';
-            document.getElementById('area').value = props.Area != null ? props.Area : '';
-            document.getElementById('fieldNotes').value = props.FieldNotes || '';
+            document.getElementById('producerName').value = propertyText(props.ProducerName);
+            document.getElementById('productionPlace').value = propertyText(props.ProductionPlace);
+            document.getElementById('area').value = propertyText(props.Area);
+            document.getElementById('fieldNotes').value = propertyText(props.FieldNotes);
             // Render and prefill additional fields
             renderAdditionalFields(props);
             document.getElementById('featureForm').classList.remove('hidden');
@@ -4989,7 +5076,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 input.type = 'text';
                 input.id = getExtraFieldInputId(field.key);
                 input.placeholder = t('field.enter', `Enter ${localizedLabel}`, { label: localizedLabel });
-                input.value = prefillProps && prefillProps[field.key] != null ? String(prefillProps[field.key]) : '';
+                input.value = propertyText(prefillProps?.[field.key]);
                 group.appendChild(label);
                 group.appendChild(input);
                 container.appendChild(group);
@@ -5013,12 +5100,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             const summary = document.createElement('div');
             summary.className = 'feature-meta';
             if (hasValidPolygon) {
-                const area = hasArea ? values.area : polygonAreaHectares(getPolygonRingFromFeature(values.polygonFeature));
+                const area = resolveSupplementalArea(values.area, values.polygonFeature);
                 summary.textContent = t('supplemental.captured', `${formatArea(area)} captured`, { area: formatArea(area) });
             } else if (values.geometry) {
                 summary.textContent = t('supplemental.invalid', 'Invalid saved polygon');
             } else if (hasArea) {
-                summary.textContent = t('supplemental.savedNoPolygon', `${formatArea(values.area)} saved, no polygon captured`, { area: formatArea(values.area) });
+                const area = formatArea(values.area) || propertyText(values.area);
+                summary.textContent = t('supplemental.savedNoPolygon', `${area} saved, no polygon captured`, { area });
             } else {
                 summary.textContent = t('supplemental.notCapturedGeneric', `${localizedLabel} not captured`, { label: localizedLabel });
             }
@@ -5067,21 +5155,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             return getPolygonFeatureFromValue(feature.properties?.[supplementalPreviewLayer.geometryKey]);
         }
 
-        function toggleSupplementalPolygonOverlay(featureIndex, encodedGeometryKey, button) {
-            const geometryKey = decodeURIComponent(encodedGeometryKey);
+        // fieldIndex points into getSupplementalPolygonFieldsForProperties(), so no imported key text ends up in inline HTML
+        function toggleSupplementalPolygonOverlay(featureIndex, fieldIndex, button) {
             const feature = features[featureIndex];
             const props = feature?.properties || {};
-            const polygonFeature = getPolygonFeatureFromValue(props[geometryKey]);
-            const field = getSupplementalPolygonFieldsForProperties(props).find(f => f.geometryKey === geometryKey) || {
-                label: geometryKey.replace(/ GeoJSON$/, ''),
-                areaKey: geometryKey.replace(/ GeoJSON$/, ''),
-                geometryKey
-            };
-            const localizedLabel = getFieldLabel(field.key || field.areaKey, field.label);
+            const field = getSupplementalPolygonFieldsForProperties(props)[fieldIndex];
+            const polygonFeature = field && getPolygonFeatureFromValue(props[field.geometryKey]);
             if (!polygonFeature) {
                 showToast(t('supplemental.noValidPolygon', 'No valid polygon to view'));
                 return;
             }
+            const { geometryKey } = field;
+            const localizedLabel = getFieldLabel(field.key || field.areaKey, field.label);
             initializeMapIfNeeded();
             const wasActive = supplementalPreviewLayer?.featureIndex === featureIndex && supplementalPreviewLayer?.geometryKey === geometryKey;
             clearSupplementalPreviewLayer();
@@ -5121,10 +5206,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 button.title = title;
                 button.setAttribute('aria-label', title);
             }
-            showToast(t('supplemental.viewToast', `${localizedLabel}: ${formatArea(props[field.areaKey] || polygonAreaHectares(getPolygonRingFromFeature(polygonFeature)))}`, {
-                label: localizedLabel,
-                area: formatArea(props[field.areaKey] || polygonAreaHectares(getPolygonRingFromFeature(polygonFeature)))
-            }));
+            const area = formatArea(resolveSupplementalArea(props[field.areaKey], polygonFeature));
+            showToast(t('supplemental.viewToast', `${localizedLabel}: ${area}`, { label: localizedLabel, area }));
         }
         window.toggleSupplementalPolygonOverlay = toggleSupplementalPolygonOverlay;
 
@@ -5974,15 +6057,28 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             };
         }
 
+        // Accepts a Polygon, a single-part MultiPolygon (as other GIS tools write it), or a Feature with
+        // either, also when stored as a JSON string (as after a round trip through CSV)
         function getPolygonFeatureFromValue(value) {
-            if (!value || typeof value !== 'object') return null;
-            if (value.type === 'Feature' && value.geometry?.type === 'Polygon') {
-                return createPolygonFeatureFromRing(value.geometry.coordinates?.[0], value.properties || {});
+            if (typeof value === 'string' && value.trim().startsWith('{')) {
+                try { value = JSON.parse(value); } catch (_) { return null; }
             }
-            if (value.type === 'Polygon') {
-                return createPolygonFeatureFromRing(value.coordinates?.[0], {});
+            if (!value || typeof value !== 'object') return null;
+            const geometry = value.type === 'Feature' ? value.geometry : value;
+            const properties = value.type === 'Feature' && value.properties && typeof value.properties === 'object' ? value.properties : {};
+            if (geometry?.type === 'Polygon') {
+                return createPolygonFeatureFromRing(geometry.coordinates?.[0], properties);
+            }
+            if (geometry?.type === 'MultiPolygon' && Array.isArray(geometry.coordinates) && geometry.coordinates.length === 1) {
+                return createPolygonFeatureFromRing(geometry.coordinates[0]?.[0], properties);
             }
             return null;
+        }
+
+        // A stored area that isn't a number (e.g. "12,5") falls back to the polygon's own area
+        function resolveSupplementalArea(area, polygonFeature) {
+            const numeric = area === null || area === undefined || area === '' ? NaN : Number(area);
+            return Number.isFinite(numeric) ? numeric : polygonAreaHectares(getPolygonRingFromFeature(polygonFeature));
         }
 
         function getPolygonRingFromFeature(feature) {
@@ -6018,7 +6114,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             return String(value);
         }
 
-        function serializePropertyValueForCSV(value) {
+        // Property values of imported features can be any JSON type
+        function propertyText(value) {
             if (value === null || value === undefined) return '';
             if (typeof value === 'object') return JSON.stringify(value);
             return String(value);
@@ -6254,7 +6351,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             
             // Build CSV header
             const headers = ['geometry_type', 'point_latitude', 'point_longitude', 'geometry', ...propKeys];
-            const csvRows = [headers.map(h => `"${h}"`).join(',')];
+            const csvQuote = text => `"${text.replace(/"/g, '""')}"`;
+            const csvRows = [headers.map(csvQuote).join(',')];
             
             // Build CSV rows
             exportFeatures.forEach(f => {
@@ -6281,17 +6379,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 } else if (f.geometry?.coordinates) {
                     geomStr = JSON.stringify(f.geometry.coordinates);
                 }
-                row.push(`"${geomStr.replace(/"/g, '""')}"`);
+                row.push(csvQuote(geomStr));
                 
                 // Properties
                 propKeys.forEach(key => {
                     const val = f.properties?.[key];
-                    if (val === null || val === undefined) {
-                        row.push('');
-                    } else {
-                        const serialized = serializePropertyValueForCSV(val);
-                        row.push(`"${serialized.replace(/"/g, '""')}"`);
-                    }
+                    row.push(val === null || val === undefined ? '' : csvQuote(propertyText(val)));
                 });
                 
                 csvRows.push(row.join(','));
@@ -6803,6 +6896,46 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             document.getElementById('aboutModal').classList.remove('hidden'); 
         };
         document.getElementById('btnCloseAbout').onclick = () => document.getElementById('aboutModal').classList.add('hidden');
+        document.getElementById('btnExportLogs').onclick = exportLogs;
+
+        // Plain-text report for support. Each detail is read defensively: the log matters most when the app is broken.
+        async function exportLogs() {
+            const read = (getValue) => { try { return getValue(); } catch (_) { return 'unknown'; } };
+            let storageProtected = 'unknown';
+            try { if (navigator.storage?.persisted) storageProtected = (await navigator.storage.persisted()) ? 'yes' : 'no'; } catch (_) {}
+            const now = new Date();
+            const entries = errorLog.entries();
+            const report = [
+                'GeoRoots Locator log',
+                `Version: ${APP_VERSION}`,
+                `Exported: ${now.toISOString()} (device time: ${now.toString()})`,
+                `App URL: ${location.origin}${location.pathname}`,
+                `Installed app: ${read(() => isPWA() ? 'yes' : 'no')}`,
+                `Service worker: ${read(() => navigator.serviceWorker?.controller ? 'active' : 'none')}`,
+                `Online: ${navigator.onLine ? 'yes' : 'no'}`,
+                `Language: ${read(getActiveLanguage)}`,
+                `Additional fields: ${read(() => loadSettings().additionalFields)}`,
+                `Features: ${read(() => features.length)}`,
+                `Storage protected: ${storageProtected}`,
+                `Last save failed: ${read(() => storageSaveFailed ? 'yes' : 'no')}`,
+                `User agent: ${navigator.userAgent}`,
+                '',
+                entries.length ? `Errors and warnings (${entries.length}, oldest first):` : 'No errors or warnings recorded.',
+                ...entries.map(e => `\n[${e.time}] v${e.version} ${String(e.level).toUpperCase()}${e.count > 1 ? ` (x${e.count})` : ''}\n${e.message}`)
+            ].join('\n');
+
+            const pad = n => String(n).padStart(2, '0');
+            const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+            const url = URL.createObjectURL(new Blob([report], { type: 'text/plain;charset=utf-8' }));
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `georoots-locator-log-${stamp}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            showToast(t('about.logsExported', 'Log file saved'));
+        }
 
         // Settings modal
         // Predefined export property keys
@@ -7029,7 +7162,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
         });
 
         // Manage Features modal
-        document.getElementById('menuManageFeatures').onclick = () => { deactivateAllContexts(); closeSidebar(); renderManageFeatures(); document.getElementById('manageFeaturesModal').classList.remove('hidden'); };
+        document.getElementById('menuManageFeatures').onclick = () => { deactivateAllContexts(); closeSidebar(); document.getElementById('manageFeaturesModal').classList.remove('hidden'); renderManageFeatures(); };
         document.getElementById('btnCloseManageFeatures').onclick = () => { document.getElementById('featuresSearch').value = ''; renderManageFeatures(); document.getElementById('manageFeaturesModal').classList.add('hidden'); };
         document.getElementById('featuresSearch').addEventListener('input', renderManageFeatures);
         document.getElementById('btnClearSearch').addEventListener('click', () => { document.getElementById('featuresSearch').value = ''; renderManageFeatures(); });
@@ -7051,13 +7184,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             const q = (document.getElementById('featuresSearch').value || '').toLowerCase();
             const list = document.getElementById('manageFeaturesList');
             list.innerHTML = '';
-            const filtered = features.filter(f => {
-                const props = f.properties || {};
-                const name = (props.ProducerName || '').toLowerCase();
-                const ref = (props.ProductionPlace || '').toLowerCase();
-                const title = (props.ProducerName ? props.ProducerName : t('feature.untitled', 'Untitled')).toLowerCase();
-                return title.includes(q) || name.includes(q) || ref.includes(q) || f.geometry.type.toLowerCase().includes(q);
-            });
+            const filtered = features.filter(f => [
+                propertyText(f.properties?.ProducerName) || t('feature.untitled', 'Untitled'),
+                propertyText(f.properties?.ProductionPlace),
+                String(f.geometry?.type || '')
+            ].some(text => text.toLowerCase().includes(q)));
             if (filtered.length === 0) {
                 const empty = document.createElement('div');
                 empty.className = 'feature-item';
@@ -7071,14 +7202,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 item.dataset.featureIndex = features.indexOf(f);
                 const left = document.createElement('div');
                 
-                // Add accuracy indicator dot
-                const accuracy = f.properties?.Accuracy;
+                // Add accuracy indicator dot (imported features may store accuracy as text or not at all)
+                const accuracy = Number(f.properties?.Accuracy);
+                const accuracyText = Number.isFinite(accuracy) && accuracy > 0
+                    ? t('toast.accuracy', `Accuracy: ±${accuracy.toFixed(1)}m`, { accuracy: accuracy.toFixed(1) })
+                    : null;
                 const accuracyDot = document.createElement('span');
                 accuracyDot.className = 'status-dot';
                 accuracyDot.style.cursor = 'pointer';
                 accuracyDot.style.marginRight = '8px';
                 
-                if (!accuracy || accuracy === 0) {
+                if (!accuracyText) {
                     // Gray for no accuracy data
                     accuracyDot.style.background = 'var(--gray-medium)';
                 } else if (accuracy > 20) {
@@ -7092,15 +7226,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 // Show accuracy on click
                 accuracyDot.onclick = (e) => {
                     e.stopPropagation();
-                    if (!accuracy || accuracy === 0) {
-                        showToast(t('toast.noAccuracy', 'No accuracy data'));
-                    } else {
-                        showToast(t('toast.accuracy', `Accuracy: ±${accuracy.toFixed(1)}m`, { accuracy: accuracy.toFixed(1) }));
-                    }
+                    showToast(accuracyText || t('toast.noAccuracy', 'No accuracy data'));
                 };
-                accuracyDot.title = accuracy && accuracy > 0
-                    ? t('toast.accuracy', `Accuracy: ±${accuracy.toFixed(1)}m`, { accuracy: accuracy.toFixed(1) })
-                    : t('toast.noAccuracy', 'No accuracy data');
+                accuracyDot.title = accuracyText || t('toast.noAccuracy', 'No accuracy data');
                 
                 const titleContainer = document.createElement('div');
                 titleContainer.style.display = 'flex';
@@ -7108,14 +7236,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
                 
                 const title = document.createElement('div');
                 title.className = 'feature-title';
-                title.textContent = (f.properties?.ProducerName || t('feature.untitled', 'Untitled')) + ' (' + getFeatureTypeLabel(f.geometry.type) + ')';
+                title.textContent = getFeatureListTitle(f);
                 
                 titleContainer.appendChild(accuracyDot);
                 titleContainer.appendChild(title);
                 
                 const meta = document.createElement('div');
                 meta.className = 'feature-meta';
-                meta.textContent = (f.properties?.ProductionPlace || t('feature.noReference', 'No reference'));
+                meta.textContent = getFeatureListReference(f);
                 
                 left.appendChild(titleContainer); 
                 left.appendChild(meta);
@@ -7150,26 +7278,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             document.getElementById('mainView').classList.remove('hidden');
             drawFeaturesOnMap();
             // Zoom to feature
-            const type = feature.geometry?.type;
-            if (type === 'Point') {
-                const [lng, lat] = feature.geometry.coordinates;
-                map.setView([lat, lng], 16);
-            } else if (type === 'Polygon') {
-                const coords = feature.geometry.coordinates?.[0] || [];
-                if (coords.length) {
-                    const latlngs = coords.map(c => [c[1], c[0]]);
-                    const bounds = L.latLngBounds(latlngs);
-                    map.fitBounds(bounds.pad(0.2));
-                }
-            } else if (type === 'MultiPolygon') {
-                // Focus on first polygon exterior ring
-                const polys = feature.geometry.coordinates || [];
-                const firstExterior = Array.isArray(polys) && polys.length > 0 && Array.isArray(polys[0]) && polys[0].length > 0 ? polys[0][0] : [];
-                if (firstExterior.length) {
-                    const latlngs = firstExterior.map(c => [c[1], c[0]]);
-                    const bounds = L.latLngBounds(latlngs);
-                    map.fitBounds(bounds.pad(0.2));
-                }
+            const bounds = createFeatureLayer(feature)?.getBounds();
+            if (bounds?.isValid()) {
+                if (feature.geometry.type === 'Point') map.setView(bounds.getCenter(), 16);
+                else map.fitBounds(bounds.pad(0.2));
             }
             // Strong focus pulse at the crosshair position (two quick pulses)
             const mapEl = document.getElementById('map');
@@ -7193,9 +7305,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
             deactivateAllContexts();
             // Clear search so the feature is visible
             const s = document.getElementById('featuresSearch'); if (s) s.value = '';
+            document.getElementById('manageFeaturesModal').classList.remove('hidden');
             renderManageFeatures();
-            const modal = document.getElementById('manageFeaturesModal');
-            modal.classList.remove('hidden');
             const list = document.getElementById('manageFeaturesList');
             // Find item with matching data-feature-index
             const target = list.querySelector(`.feature-item[data-feature-index="${index}"]`);
@@ -7481,4 +7592,4 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
     </script>
 </body>
 </html>
-                                                 
+                                                                                                                                                                                             
